@@ -1,0 +1,11 @@
+# Robots.txt for Hireoo
+# Allow all web crawlers to access our site
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://hireoo.com/sitemap.xml
+
+# Crawl delay (optional)
+Crawl-delay: 1

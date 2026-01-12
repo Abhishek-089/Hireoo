@@ -1,0 +1,419 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// NextAuth.js Models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  // Some OAuth providers (e.g. Google) also return a refresh_token_expires_in field.
+  // NextAuth's Prisma adapter will try to persist it if present, so we include it here.
+  refresh_token_expires_in Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Resume model
+model Resume {
+  id         String   @id @default(cuid())
+  user_id    String
+  file_url   String
+  file_name  String?
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// Gmail credentials model
+model GmailCredential {
+  id             String   @id @default(cuid())
+  user_id        String   @unique
+  email_address  String
+  access_token   String   // Encrypted
+  refresh_token  String   // Encrypted
+  token_expiry   DateTime
+  scopes         String[] // Array of granted scopes
+  connected_at   DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// Job model - scraped job postings
+model Job {
+  id              String   @id @default(cuid())
+  scraped_post_id String?  @unique
+  title           String?
+  company         String?
+  location        String?
+  description     String?  @db.Text
+  requirements    String?  @db.Text
+  skills          String[] // Extracted skills
+  salary_range    String?
+  job_type        String?  // full-time, part-time, contract, internship
+  experience_level String?
+  application_url String?
+  posted_date     DateTime?
+  scraped_at      DateTime @default(now())
+  source_url      String?  // LinkedIn URL
+  embedding       Float[]  // OpenAI embedding vector
+  status          String   @default("active") // active, applied, expired
+
+  // Relations
+  scraped_post    ScrapedPost? @relation(fields: [scraped_post_id], references: [id])
+  user_matches    JobMatch[]
+  emailDrafts     EmailDraft[]
+
+  @@index([scraped_at])
+  @@index([status])
+  @@index([company])
+  @@index([location])
+}
+
+// Job Match model - AI-powered job-user matches
+model JobMatch {
+  id                  String    @id @default(cuid())
+  user_id             String
+  job_id              String
+  embedding_similarity Float     // Cosine similarity 0-1
+  skill_overlap_score  Float     // Skill overlap percentage 0-1
+  experience_fit_score Float     // Experience fit score 0-1
+  location_fit_score   Float     // Location fit score 0-1
+  final_score          Float     // Combined final score 0-100
+  match_quality        String    // 'good', 'medium', 'bad'
+  matched_at           DateTime  @default(now())
+  applied              Boolean   @default(false)
+  applied_at           DateTime?
+  notes                String?
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  emails Email[]
+  email_drafts EmailDraft[]
+
+  @@unique([user_id, job_id])
+  @@index([user_id, matched_at])
+  @@index([job_id])
+  @@index([final_score])
+  @@index([match_quality])
+  @@index([applied])
+}
+
+// Email Draft model - AI-generated cold email drafts
+model EmailDraft {
+  id          String    @id @default(cuid())
+  user_id     String
+  job_id      String
+  match_id    String    // Reference to JobMatch
+  subject     String
+  body        String    @db.Text
+  ps_line     String?   // Postscript line
+  generated_at DateTime @default(now())
+  status      String    @default("draft") // draft, sent, edited, rejected
+  used        Boolean   @default(false)   // Whether this draft was used to send an email
+
+  user User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  job  Job        @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  match JobMatch   @relation(fields: [match_id], references: [id], onDelete: Cascade)
+  emailLogs       EmailLog[]
+
+  @@index([user_id, generated_at])
+  @@index([job_id])
+  @@index([match_id])
+  @@index([status])
+  @@index([used])
+}
+
+// Email Log model - Gmail API sent emails and replies
+model EmailLog {
+  id              String    @id @default(cuid())
+  user_id         String
+  email_draft_id  String?   // Reference to EmailDraft if sent from our system
+  gmail_message_id String   // Gmail API message ID
+  thread_id       String    // Gmail thread ID
+  from_email      String
+  to_email        String
+  subject         String
+  snippet         String    // Gmail message snippet
+  direction       String    // 'sent' or 'received'
+  sent_at         DateTime  @default(now())
+  gmail_timestamp DateTime // Original Gmail timestamp
+  is_reply        Boolean   @default(false)
+  status          String    @default("sent") // sent, delivered, failed, replied
+
+  user User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  emailDraft      EmailDraft? @relation(fields: [email_draft_id], references: [id])
+  thread          EmailThread @relation(fields: [thread_id], references: [id])
+
+  @@index([user_id, sent_at])
+  @@index([gmail_message_id])
+  @@index([thread_id])
+  @@index([direction])
+  @@index([status])
+}
+
+// Email Thread model - Gmail conversation threads
+model EmailThread {
+  id              String    @id @default(cuid())
+  user_id         String
+  gmail_thread_id String   // Gmail API thread ID
+  subject         String
+  participants    String[] // Array of email addresses in thread
+  last_message_at DateTime
+  message_count   Int       @default(0)
+  is_active       Boolean   @default(true) // Whether thread is still active
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  user User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  messages        EmailLog[]
+
+  @@unique([user_id, gmail_thread_id])
+  @@index([user_id, last_message_at])
+  @@index([is_active])
+}
+
+// Subscription model - User billing and subscription management
+model Subscription {
+  id                    String    @id @default(cuid())
+  user_id               String    @unique
+  stripe_customer_id    String?   @unique // Stripe customer ID
+  stripe_subscription_id String?  @unique // Stripe subscription ID
+  stripe_price_id       String?   // Current price ID
+  plan_name             String    // free, pro_monthly, pro_yearly
+  status                String    @default("active") // active, canceled, past_due, incomplete
+  current_period_start  DateTime?
+  current_period_end    DateTime?
+  cancel_at_period_end  Boolean   @default(false)
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([stripe_customer_id])
+  @@index([stripe_subscription_id])
+  @@index([status])
+}
+
+// Subscription Plan model - Available plans and features
+model SubscriptionPlan {
+  id          String  @id @default(cuid())
+  name        String  @unique // free, pro_monthly, pro_yearly
+  display_name String // "Free", "Pro Monthly", "Pro Yearly"
+  description String?
+  stripe_price_id String @unique
+  price       Float   // Price in USD
+  currency    String  @default("usd")
+  interval    String? // month, year (null for free)
+  features    Json    // Feature limits and capabilities
+  is_active   Boolean @default(true)
+  created_at  DateTime @default(now())
+
+  @@index([name])
+  @@index([is_active])
+}
+
+// Email model - sent emails
+model Email {
+  id            String      @id @default(cuid())
+  user_id       String
+  job_match_id  String
+  gmail_message_id String?  // Gmail API message ID
+  to_email      String
+  subject       String
+  body_html     String
+  body_text     String
+  sent_at       DateTime    @default(now())
+  status        String      @default("sent") // sent, delivered, failed
+  thread_id     String?     // Gmail thread ID
+
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  job_match  JobMatch   @relation(fields: [job_match_id], references: [id], onDelete: Cascade)
+  replies    EmailReply[]
+
+  @@index([user_id, sent_at])
+  @@index([gmail_message_id])
+  @@index([thread_id])
+}
+
+// Email Reply model - responses to sent emails
+model EmailReply {
+  id               String   @id @default(cuid())
+  email_id         String
+  gmail_message_id String   @unique
+  from_email       String
+  subject          String
+  body_html        String
+  body_text        String
+  received_at      DateTime
+  thread_id        String?
+  is_read          Boolean  @default(false)
+
+  email Email @relation(fields: [email_id], references: [id], onDelete: Cascade)
+
+  @@index([email_id, received_at])
+  @@index([gmail_message_id])
+  @@index([thread_id])
+}
+
+// Scraped Post model - Raw LinkedIn posts received from extension
+model ScrapedPost {
+  id            String   @id @default(cuid())
+  user_id       String
+  raw_html      String   @db.Text
+  text          String   @db.Text
+  post_url      String
+  linkedin_id   String?  @unique // LinkedIn post ID
+  timestamp     DateTime?
+  created_at    DateTime @default(now())
+  processed     Boolean  @default(false)
+
+  user User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  job  Job?
+  applications ScrapedApplication[]
+  matches       ScrapedPostMatch[]
+
+  @@index([user_id, created_at])
+  @@index([linkedin_id])
+  @@index([processed])
+}
+
+// Applications sent from scraped LinkedIn posts
+model ScrapedApplication {
+  id              String   @id @default(cuid())
+  user_id         String
+  scraped_post_id String
+  hr_email        String
+  cover_letter    String   @db.Text
+  sent_at         DateTime @default(now())
+  gmail_message_id String? // Gmail API message ID
+  gmail_thread_id  String? // Gmail thread ID for tracking replies
+
+  user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  scrapedPost ScrapedPost @relation(fields: [scraped_post_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, sent_at])
+  @@index([scraped_post_id])
+  @@index([gmail_thread_id])
+}
+
+// Scraped Post Match - Tracks which scraped posts match which users
+model ScrapedPostMatch {
+  id              String    @id @default(cuid())
+  user_id         String
+  scraped_post_id String
+  match_score     Float     // 0-100 match score
+  match_quality   String    // 'good', 'medium', 'bad'
+  matched_at      DateTime  @default(now())
+  shown_to_user   Boolean   @default(false) // Whether this post was shown in dashboard
+  shown_at        DateTime? // When it was first shown
+  applied          Boolean   @default(false) // Whether user applied to this post
+  applied_at      DateTime?
+
+  user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  scrapedPost ScrapedPost @relation(fields: [scraped_post_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, scraped_post_id])
+  @@index([user_id, matched_at])
+  @@index([user_id, shown_to_user])
+  @@index([scraped_post_id])
+  @@index([match_score])
+  @@index([match_quality])
+}
+
+// Gmail credentials model
+model GmailCredentials {
+  id            String    @id @default(cuid())
+  user_id       String    @unique
+  email_address String
+  access_token  String    // Encrypted
+  refresh_token String?   // Encrypted
+  token_expiry  DateTime?
+  scopes        String[]  // Array of granted scopes (for new Gmail integration)
+  connected_at  DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// User model
+model User {
+  id                    String    @id @default(cuid())
+  name                  String?
+  email                 String    @unique
+  emailVerified         DateTime?
+  password_hash         String?
+  image                 String?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  // Onboarding fields
+  onboarding_step       Int       @default(0)
+  current_role          String?
+  experience_level      String?
+  skills                String[]  // Array of selected skills
+  preferred_job_titles  String[]  // Array of preferred job titles
+  preferred_locations   String[]  // Array of preferred locations
+  remote_work_preferred Boolean   @default(false)
+  job_types             String[]  // Array of job types
+  resume_uploaded       Boolean   @default(false)
+  gmail_connected       Boolean   @default(false)
+  extension_installed   Boolean   @default(false)
+  linkedin_connected    Boolean   @default(false)
+  
+  // New preferences
+  date_posted_preference String?
+  email_template_config  Json?
+
+  accounts Account[]
+  sessions Session[]
+  resumes  Resume[]
+  gmailCredential GmailCredential?
+  job_matches JobMatch[]
+  emails Email[]
+  scrapedPosts ScrapedPost[]
+  gmailCredentials GmailCredentials?
+  emailDrafts EmailDraft[]
+  emailLogs EmailLog[]
+  emailThreads EmailThread[]
+  subscription Subscription?
+  scrapedApplications ScrapedApplication[]
+  scrapedPostMatches ScrapedPostMatch[]
+}
