@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
           change: 0,
         },
       },
-      recentActivity: recentActivity.map(email => ({
+      recentActivity: recentActivity.map((email: any) => ({
         id: email.id,
         type: 'email_sent',
         title: `Applied to ${email.job_match.job.title}`,

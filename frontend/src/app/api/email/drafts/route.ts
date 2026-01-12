@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     // Filter by status if specified
     let filteredDrafts = drafts
     if (status && ['draft', 'sent', 'edited', 'rejected'].includes(status)) {
-      filteredDrafts = drafts.filter(draft => draft.status === status)
+      filteredDrafts = drafts.filter((draft: any) => draft.status === status)
     }
 
     return NextResponse.json({

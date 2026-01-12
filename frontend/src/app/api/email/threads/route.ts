@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     ])
 
     return NextResponse.json({
-      threads: threads.map(thread => ({
+      threads: threads.map((thread: any) => ({
         id: thread.id,
         gmailThreadId: thread.gmail_thread_id,
         subject: thread.subject,

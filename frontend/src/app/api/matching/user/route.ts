@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     // Filter by quality if specified
     let filteredMatches = matches
     if (quality && ['good', 'medium', 'bad'].includes(quality)) {
-      filteredMatches = matches.filter(match => match.matchQuality === quality)
+      filteredMatches = matches.filter((match: any) => match.matchQuality === quality)
     }
 
     return NextResponse.json({

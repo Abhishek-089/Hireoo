@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Format the response
-    const formattedMatches = jobMatches.map(match => ({
+    const formattedMatches = jobMatches.map((match: any) => ({
       id: match.id,
       job: match.job,
       matchScore: match.match_score,
