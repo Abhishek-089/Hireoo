@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     // 2. Get thread IDs
     const threadIds = applications
       .map((app: any) => app.gmail_thread_id)
-      .filter((id): id is string => !!id)
+      .filter((id: any): id is string => !!id)
 
     // 3. Fetch threads with messages
     const threads = await prisma.emailThread.findMany({
