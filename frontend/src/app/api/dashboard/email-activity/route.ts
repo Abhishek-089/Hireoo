@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Get thread IDs
     const threadIds = applications
-      .map(app => app.gmail_thread_id)
+      .map((app: any) => app.gmail_thread_id)
       .filter((id): id is string => !!id)
 
     // 3. Fetch threads with messages
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     })
 
     // 4. Combine data
-    const activityData = applications.map(app => {
+    const activityData = applications.map((app: any) => {
       const thread = threads.find(t => t.gmail_thread_id === app.gmail_thread_id)
 
       // Determine statuc
