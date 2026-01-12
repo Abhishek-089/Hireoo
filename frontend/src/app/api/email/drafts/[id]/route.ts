@@ -7,11 +7,15 @@ interface RouteParams {
   params: { id: string }
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions)
 
-    if (!session?.user?.id) {
+    if (!(session?.user as any)?.id) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -31,7 +35,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Verify the draft belongs to the user
-    if (draft.user.id !== session.user.id) {
+    if (draft.user.id !== (session.user as any).id) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 403 }
