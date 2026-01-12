@@ -61,12 +61,12 @@ export async function GET(request: NextRequest) {
 
     // 4. Combine data
     const activityData = applications.map((app: any) => {
-      const thread = threads.find(t => t.gmail_thread_id === app.gmail_thread_id)
+      const thread = threads.find((t: any) => t.gmail_thread_id === app.gmail_thread_id)
 
       // Determine statuc
       let status = 'sent'
       if (thread) {
-        const hasReply = thread.messages.some(m => m.direction === 'received')
+        const hasReply = thread.messages.some((m: any) => m.direction === 'received')
         if (hasReply) status = 'replied'
       }
 
@@ -105,12 +105,12 @@ export async function GET(request: NextRequest) {
         // Or simplistic approach: Since we are in dev/mock, assume we want all thread messages appearing AFTER our initial send.
 
         const threadMessages = thread.messages
-          .filter(m => {
+          .filter((m: any) => {
             // Filter out message if it has same ID as app message ID (if we logged it perfectly)
             if (app.gmail_message_id && m.gmail_message_id === app.gmail_message_id) return false
             return true
           })
-          .map(m => ({
+          .map((m: any) => ({
             ...m,
             body: m.snippet // Map snippet to body for consistent type
           }))
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
         messages = [...messages, ...threadMessages]
 
         // Re-sort just in case
-        messages.sort((a, b) => new Date(a.gmail_timestamp).getTime() - new Date(b.gmail_timestamp).getTime())
+        messages.sort((a: any, b: any) => new Date(a.gmail_timestamp).getTime() - new Date(b.gmail_timestamp).getTime())
       }
 
       return {
