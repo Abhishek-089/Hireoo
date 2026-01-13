@@ -13,7 +13,8 @@
     "seed-plans-simple": "tsx src/scripts/seed-plans-simple.ts",
     "db:studio": "prisma studio",
     "db:push": "prisma db push",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
