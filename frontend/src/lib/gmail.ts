@@ -173,4 +173,77 @@ export class GmailService {
       return { connected: false, error: 'Failed to check status' }
     }
   }
+  static getAuthUrl(userId: string) {
+    const scopes = [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+    ]
+
+    return this.oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: scopes,
+      state: userId,
+    })
+  }
+
+  static async getTokensFromCode(code: string) {
+    const { tokens } = await this.oauth2Client.getToken(code)
+    return tokens
+  }
+
+  static async storeCredentials(
+    userId: string,
+    emailAddress: string,
+    accessToken: string,
+    refreshToken: string | undefined,
+    expiryDate: number | null | undefined
+  ) {
+    const encryptedAccessToken = TokenEncryption.encryptToken(accessToken)
+
+    // Prepare update data
+    const updateData: any = {
+      email_address: emailAddress,
+      access_token: encryptedAccessToken,
+      updated_at: new Date(),
+    }
+
+    if (expiryDate) {
+      updateData.token_expiry = new Date(expiryDate)
+    }
+
+    if (refreshToken) {
+      updateData.refresh_token = TokenEncryption.encryptToken(refreshToken)
+    }
+
+    // Check if exists to determine if we can create (need refresh token)
+    const existing = await prisma.gmailCredential.findUnique({
+      where: { user_id: userId }
+    })
+
+    if (!existing) {
+      if (!refreshToken) {
+        throw new Error('Refresh token required for initial connection')
+      }
+
+      await prisma.gmailCredential.create({
+        data: {
+          user_id: userId,
+          email_address: emailAddress,
+          access_token: encryptedAccessToken,
+          refresh_token: TokenEncryption.encryptToken(refreshToken),
+          token_expiry: expiryDate ? new Date(expiryDate) : new Date(Date.now() + 3600 * 1000),
+          scopes: []
+        }
+      })
+    } else {
+      await prisma.gmailCredential.update({
+        where: { user_id: userId },
+        data: updateData
+      })
+    }
+  }
 }

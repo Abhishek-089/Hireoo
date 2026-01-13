@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         // For simplicity, we create a new entry as it tracks history
         await prisma.resume.create({
           data: {
-            user_id: session.user.id,
+            user_id: (session!.user as any).id,
             file_url: data.resume.fileUrl,
             file_name: data.resume.fileName,
           }

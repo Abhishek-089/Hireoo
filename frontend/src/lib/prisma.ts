@@ -25,14 +25,14 @@ function getPrismaClient(): PrismaClient {
     console.warn('⚠️  DATABASE_URL environment variable is not set. Database features will not work.')
     prismaInstance = new PrismaClient({ log: [] }) as any
     if (process.env.NODE_ENV !== 'production') {
-      globalForPrisma.prisma = prismaInstance
+      globalForPrisma.prisma = prismaInstance as PrismaClient
     }
-    return prismaInstance
+    return prismaInstance as PrismaClient
   }
 
   try {
     // Create pool with connection timeout and don't connect immediately
-    poolInstance = new Pool({ 
+    poolInstance = new Pool({
       connectionString,
       connectionTimeoutMillis: 2000, // 2 second timeout
       idleTimeoutMillis: 30000,
@@ -40,7 +40,7 @@ function getPrismaClient(): PrismaClient {
       // Don't connect on pool creation
       allowExitOnIdle: true,
     })
-    
+
     // Don't test connection on startup
     const adapter = new PrismaPg(poolInstance)
     prismaInstance = new PrismaClient({
@@ -48,12 +48,12 @@ function getPrismaClient(): PrismaClient {
       adapter,
       log: [], // Disable query logging for faster startup
     } as any)
-    
+
     if (process.env.NODE_ENV !== 'production') {
-      globalForPrisma.prisma = prismaInstance
+      globalForPrisma.prisma = prismaInstance as PrismaClient
     }
-    
-    return prismaInstance
+
+    return prismaInstance as PrismaClient
   } catch (error) {
     console.error('Failed to initialize Prisma client:', error)
     // Fallback to regular client without adapter
@@ -61,9 +61,9 @@ function getPrismaClient(): PrismaClient {
       log: [],
     } as any)
     if (process.env.NODE_ENV !== 'production') {
-      globalForPrisma.prisma = prismaInstance
+      globalForPrisma.prisma = prismaInstance as PrismaClient
     }
-    return prismaInstance
+    return prismaInstance as PrismaClient
   }
 }
 

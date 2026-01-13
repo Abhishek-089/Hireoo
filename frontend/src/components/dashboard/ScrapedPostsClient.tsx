@@ -5,7 +5,7 @@ import Link from "next/link"
 import { signIn } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Mail, ExternalLink, Star, CheckCircle2 } from "lucide-react"
+import { Mail, ExternalLink, Star, CheckCircle2, MessageSquare } from "lucide-react"
 
 type EmailReply = {
   id: string

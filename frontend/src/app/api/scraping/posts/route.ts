@@ -14,26 +14,26 @@ async function getUserIdFromRequest(request: NextRequest): Promise<string | null
       // Decode JWT (Node.js compatible version)
       const base64Url = token.split('.')[1]
       if (!base64Url) return null
-      
+
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
       // Add padding if needed
       const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
       const jsonPayload = Buffer.from(padded, 'base64').toString('utf-8')
       const payload = JSON.parse(jsonPayload)
-      
+
       // Check if token is expired
       if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
         console.warn('[API] Token expired')
         return null
       }
-      
+
       return payload.id || null
     } catch (error) {
       console.error('[API] Failed to decode Bearer token:', error)
       return null
     }
   }
-  
+
   // Fallback to session (cookie-based)
   const session = await getServerSession(authOptions)
   return session?.user?.id || null
@@ -42,7 +42,7 @@ async function getUserIdFromRequest(request: NextRequest): Promise<string | null
 export async function POST(request: NextRequest) {
   try {
     console.log('[API] POST /api/scraping/posts - Request received')
-    
+
     const userId = await getUserIdFromRequest(request)
     console.log('[API] User ID from request:', userId ? 'Found' : 'Not found')
 
@@ -101,6 +101,8 @@ export async function POST(request: NextRequest) {
         post.raw_text || // some scrapers only send raw_text
         ''
 
+      const linkedin_id = (post.id || post.post_id || '').toString().trim() || null
+
       // Construct post_url from available fields
       // Priority: post.postUrl > post.post_url > construct from post_id > construct from linkedin_id
       let post_url =
@@ -119,7 +121,6 @@ export async function POST(request: NextRequest) {
       }
 
       const timestamp = post.timestamp || post.scraped_at || null
-      const linkedin_id = (post.id || post.post_id || '').toString().trim() || null
 
       // Log the post data for debugging
       console.log(`[API] Processing post:`, {
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
           timestamp,
           linkedin_id,
         })
-        
+
         if (result.success) {
           successCount++
           console.log(`[API] Successfully stored post: ${result.postId}`)
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
           errorCount++
           console.log(`[API] Post already exists or failed: ${result.message}`)
         }
-        
+
         results.push(result)
       } catch (e) {
         errorCount++
@@ -195,12 +196,12 @@ export async function POST(request: NextRequest) {
       message: error.message,
       stack: error.stack
     } : { error: String(error) }
-    
+
     console.error("[API] Full error details:", JSON.stringify(errorDetails, null, 2))
-    
+
     return NextResponse.json(
-      { 
-        error: "Internal server error", 
+      {
+        error: "Internal server error",
         details: error instanceof Error ? error.message : String(error),
         // Only include stack in development
         ...(process.env.NODE_ENV === 'development' && { stack: error instanceof Error ? error.stack : undefined })
@@ -240,7 +241,7 @@ export async function GET(request: NextRequest) {
     // Get posts
     const posts = await prisma.scrapedPost.findMany({
       where,
-      orderBy: { scraped_at: 'desc' },
+      orderBy: { created_at: 'desc' },
       skip,
       take: limit,
     })

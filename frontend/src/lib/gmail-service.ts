@@ -117,18 +117,18 @@ export class GmailService {
       return credentials
     } catch (error: any) {
       console.error('Error refreshing access token:', error)
-      
+
       // Check if it's an invalid_grant error (token expired/revoked)
       const errorMessage = String(error?.message || '').toLowerCase()
       const errorCode = String(error?.code || '').toLowerCase()
       const responseError = String(error?.response?.data?.error || '').toLowerCase()
-      
-      if (errorMessage.includes('invalid_grant') || 
-          errorCode.includes('invalid_grant') || 
-          responseError.includes('invalid_grant')) {
+
+      if (errorMessage.includes('invalid_grant') ||
+        errorCode.includes('invalid_grant') ||
+        responseError.includes('invalid_grant')) {
         throw new Error('invalid_grant')
       }
-      
+
       throw new Error('Failed to refresh Gmail access token')
     }
   }
@@ -399,7 +399,7 @@ export class GmailService {
   private static async processMessage(userId: string, threadId: string, message: GmailMessage): Promise<void> {
     try {
       // Check if message already exists
-      const existingMessage = await prisma.emailLog.findUnique({
+      const existingMessage = await prisma.emailLog.findFirst({
         where: { gmail_message_id: message.id! },
       })
 
@@ -479,7 +479,7 @@ export class GmailService {
   private static isReply(message: GmailMessage): boolean {
     const subject = this.extractSubject(message)
     return subject.toLowerCase().startsWith('re:') ||
-           subject.toLowerCase().includes('reply')
+      subject.toLowerCase().includes('reply')
   }
 
   /**
@@ -588,6 +588,7 @@ export class GmailService {
           snippet: emailDraft.body.substring(0, 100) + '...',
           direction: 'sent',
           status: 'sent',
+          gmail_timestamp: new Date(),
         },
       })
 

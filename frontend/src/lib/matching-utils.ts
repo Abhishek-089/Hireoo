@@ -183,7 +183,7 @@ export async function triggerMatchingForUnmatchedJobs(): Promise<{
     // Find jobs that have embeddings but no matches
     const unmatchedJobs = await prisma.job.findMany({
       where: {
-        embedding: { not: [] }, // Has embedding
+        embedding: { isEmpty: false }, // Has embedding
         status: 'active',
         user_matches: {
           none: {}, // No matches yet

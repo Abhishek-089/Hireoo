@@ -35,7 +35,7 @@ export async function GET(
     }
 
     // Verify the draft belongs to the user
-    if (draft.user.id !== (session.user as any).id) {
+    if (draft.user.id !== (session?.user as any).id) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 403 }

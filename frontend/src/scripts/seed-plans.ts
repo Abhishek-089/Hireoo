@@ -11,7 +11,7 @@
  */
 
 import { prisma } from '../lib/prisma'
-import { SUBSCRIPTION_PLANS } from '../lib/stripe'
+import { SUBSCRIPTION_PLANS } from '../lib/constants/billing'
 
 async function seedSubscriptionPlans() {
   console.log('Seeding subscription plans...')
@@ -26,7 +26,7 @@ async function seedSubscriptionPlans() {
         stripe_price_id: planConfig.stripePriceId || `price_${planConfig.name}`,
         price: planConfig.price,
         currency: planConfig.currency,
-        interval: planConfig.interval || null,
+        interval: (planConfig as any).interval || null,
         features: planConfig.features,
         is_active: true,
       }

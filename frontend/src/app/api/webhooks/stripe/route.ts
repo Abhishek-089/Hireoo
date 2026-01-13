@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { headers } from "next/server"
+import { headers } from "next/headers"
 import { StripeService } from "@/lib/stripe"
 import { stripe } from "@/lib/stripe"
 
@@ -8,7 +8,7 @@ const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET!
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
-    const sig = headers().get('stripe-signature')
+    const sig = (await headers()).get('stripe-signature')
 
     if (!sig) {
       return NextResponse.json(

@@ -65,7 +65,7 @@ export function JobPreferencesStep({
   const handleJobTitleRemove = (title: string) => {
     setFormData(prev => ({
       ...prev,
-      preferredJobTitles: prev.preferredJobTitles.filter(t => t !== title)
+      preferredJobTitles: prev.preferredJobTitles.filter((t: string) => t !== title)
     }))
   }
 
@@ -91,7 +91,7 @@ export function JobPreferencesStep({
   const handleLocationRemove = (location: string) => {
     setFormData(prev => ({
       ...prev,
-      preferredLocations: prev.preferredLocations.filter(l => l !== location)
+      preferredLocations: prev.preferredLocations.filter((l: string) => l !== location)
     }))
   }
 
@@ -109,7 +109,7 @@ export function JobPreferencesStep({
     setFormData(prev => ({
       ...prev,
       jobTypes: prev.jobTypes.includes(jobTypeId)
-        ? prev.jobTypes.filter(id => id !== jobTypeId)
+        ? prev.jobTypes.filter((id: string) => id !== jobTypeId)
         : [...prev.jobTypes, jobTypeId]
     }))
   }
@@ -137,7 +137,7 @@ export function JobPreferencesStep({
         {formData.preferredJobTitles.length > 0 && (
           <div className="mb-4">
             <div className="flex flex-wrap gap-2">
-              {formData.preferredJobTitles.map((title) => (
+              {formData.preferredJobTitles.map((title: string) => (
                 <Badge key={title} variant="secondary" className="px-3 py-1">
                   {title}
                   <button
@@ -168,7 +168,7 @@ export function JobPreferencesStep({
 
         {/* Popular Job Titles */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {PREDEFINED_JOB_TITLES.filter(title => !formData.preferredJobTitles.includes(title)).slice(0, 12).map((title) => (
+          {PREDEFINED_JOB_TITLES.filter(title => !formData.preferredJobTitles.includes(title)).slice(0, 12).map((title: string) => (
             <button
               key={title}
               onClick={() => handleJobTitleSelect(title)}
@@ -190,7 +190,7 @@ export function JobPreferencesStep({
         {formData.preferredLocations.length > 0 && (
           <div className="mb-4">
             <div className="flex flex-wrap gap-2">
-              {formData.preferredLocations.map((location) => (
+              {formData.preferredLocations.map((location: string) => (
                 <Badge key={location} variant="secondary" className="px-3 py-1">
                   <MapPin className="h-3 w-3 mr-1" />
                   {location}
@@ -222,7 +222,7 @@ export function JobPreferencesStep({
 
         {/* Popular Cities */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {MAJOR_CITIES.filter(city => !formData.preferredLocations.includes(city)).map((city) => (
+          {MAJOR_CITIES.filter(city => !formData.preferredLocations.includes(city)).map((city: string) => (
             <button
               key={city}
               onClick={() => handleLocationSelect(city)}

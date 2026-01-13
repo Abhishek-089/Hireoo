@@ -71,8 +71,8 @@ export class StructuredMatchingService {
       return 0.5
     }
 
-    const userScore = experienceLevels[userLevel] || 3
-    const jobScore = experienceLevels[jobLevel] || 3
+    const userScore = experienceLevels[userLevel as keyof typeof experienceLevels] || 3
+    const jobScore = experienceLevels[jobLevel as keyof typeof experienceLevels] || 3
 
     // Calculate fit based on difference
     const difference = Math.abs(userScore - jobScore)
@@ -109,7 +109,7 @@ export class StructuredMatchingService {
     // Check for exact matches or partial matches
     for (const userLocation of normalizedUserLocations) {
       if (normalizedJobLocation.includes(userLocation) ||
-          userLocation.includes(normalizedJobLocation)) {
+        userLocation.includes(normalizedJobLocation)) {
         return 1.0 // Perfect location match
       }
 
