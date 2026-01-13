@@ -141,13 +141,13 @@ export async function getJobMatchingStats(jobId: string): Promise<{
       return null
     }
 
-    const goodMatches = matches.filter(m => m.match_quality === 'good').length
-    const mediumMatches = matches.filter(m => m.match_quality === 'medium').length
-    const badMatches = matches.filter(m => m.match_quality === 'bad').length
-    const appliedCount = matches.filter(m => m.applied).length
+    const goodMatches = matches.filter((m: any) => m.match_quality === 'good').length
+    const mediumMatches = matches.filter((m: any) => m.match_quality === 'medium').length
+    const badMatches = matches.filter((m: any) => m.match_quality === 'bad').length
+    const appliedCount = matches.filter((m: any) => m.applied).length
 
     // Get top 5 matches
-    const topMatches = matches.slice(0, 5).map(match => ({
+    const topMatches = matches.slice(0, 5).map((match: any) => ({
       userId: match.user_id,
       userName: match.user.name,
       userEmail: match.user.email,
