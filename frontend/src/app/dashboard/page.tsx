@@ -46,7 +46,7 @@ async function getDashboardStats(userId: string) {
           gmail_thread_id: { not: null }
         },
         select: { gmail_thread_id: true }
-      }).then(async (apps) => {
+      }).then(async (apps: { gmail_thread_id: string | null }[]) => {
         const threadIds = apps.map(a => a.gmail_thread_id).filter(Boolean) as string[]
         
         if (threadIds.length === 0) return 0
