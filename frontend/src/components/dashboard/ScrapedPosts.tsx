@@ -213,7 +213,7 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
 
   // Process non-applied posts
   const posts = rawPosts
-    .map((post) => {
+    .map((post: any) => {
       const emails = extractEmails(post.text || "")
       const match = post.matches[0]
       return {
@@ -232,7 +232,7 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
 
   // Process applied posts and fetch email replies
   const appliedPostsWithReplies = await Promise.all(
-    rawAppliedPosts.map(async (post) => {
+    rawAppliedPosts.map(async (post: any) => {
       const emails = extractEmails(post.text || "")
       const match = post.matches[0]
       const application = post.applications[0]
@@ -268,7 +268,7 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
             take: 5, // Get up to 5 most recent replies
           })
           
-          replies = emailLogs.map(log => ({
+          replies = emailLogs.map((log: any) => ({
             id: log.id,
             from_email: log.from_email,
             subject: log.subject,
