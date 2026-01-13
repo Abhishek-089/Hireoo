@@ -310,7 +310,7 @@ export class LinkedInScraper {
   // Cached remote config (fallback to defaults)
   private config: ScraperConfig = LinkedInScraper.DEFAULT_CONFIG
   private configLoaded = false
-  private readonly CONFIG_URL = 'http://localhost:3000/api/scraper/config'
+  private readonly CONFIG_URL = 'https://hireoo-taupe.vercel.app/api/scraper/config'
 
   // Track scraped post URLs (more stable than IDs) to avoid duplicates within session
   private scrapedPostUrls = new Set<string>()

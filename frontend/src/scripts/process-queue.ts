@@ -10,7 +10,13 @@
  * npx tsx src/scripts/process-queue.ts
  */
 
+import { loadEnvConfig } from '@next/env'
 import { initializeWorkers } from '../lib/queue'
+
+// Load environment variables from .env.local, .env, etc.
+const projectDir = process.cwd()
+loadEnvConfig(projectDir)
+
 
 // Initialize all workers
 initializeWorkers()

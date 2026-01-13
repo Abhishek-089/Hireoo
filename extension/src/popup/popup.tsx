@@ -80,7 +80,7 @@ const Popup: React.FC = () => {
   const handleLogin = () => {
     // Open Hireoo sign-in page in the main web app.
     // For local development this points at the frontend dev server.
-    const appBaseUrl = 'http://localhost:3000'
+    const appBaseUrl = 'https://hireoo-taupe.vercel.app'
     const loginUrl = `${appBaseUrl}/signin?from=extension=1`
     chrome.tabs.create({ url: loginUrl })
   }

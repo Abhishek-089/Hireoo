@@ -7,14 +7,29 @@ let redisConnection: IORedis | null = null
 function getRedisConnection(): IORedis {
   if (!redisConnection) {
     if (process.env.REDIS_URL) {
-      redisConnection = new IORedis(process.env.REDIS_URL, {
-        maxRetriesPerRequest: null,
-        retryStrategy: (times) => Math.min(times * 50, 5000),
-        lazyConnect: true,
-        tls: {
-          rejectUnauthorized: false
-        }
-      })
+      try {
+        const trimmedUrl = process.env.REDIS_URL.trim()
+        const url = new URL(trimmedUrl)
+
+        redisConnection = new IORedis({
+          host: url.hostname,
+          port: parseInt(url.port || '6379'),
+          username: url.username,
+          password: url.password,
+          maxRetriesPerRequest: null,
+          retryStrategy: (times) => Math.min(times * 50, 5000),
+          lazyConnect: true,
+          tls: (url.protocol === 'rediss:' || url.hostname.includes('upstash.io')) ? { rejectUnauthorized: false } : undefined
+        })
+      } catch (error) {
+        console.error('Failed to parse REDIS_URL, falling back to string:', error)
+        redisConnection = new IORedis(process.env.REDIS_URL, {
+          maxRetriesPerRequest: null,
+          retryStrategy: (times) => Math.min(times * 50, 5000),
+          lazyConnect: true,
+          tls: { rejectUnauthorized: false }
+        })
+      }
     } else {
       redisConnection = new IORedis({
         host: process.env.REDIS_HOST || 'localhost',
@@ -139,20 +154,78 @@ export function initializeWorkers() {
     QUEUE_NAMES.AI_EXTRACTION,
     async (job) => {
       console.log(`Processing AI extraction job ${job.id} for scraped post ${job.data.scrapedPostId}`)
-      const { scrapedPostId, rawHtml, text } = job.data
+      const { scrapedPostId, rawHtml, text, postUrl } = job.data
+
       try {
-        console.log(`AI extraction completed for post ${scrapedPostId}`)
+        // 1. Call AI Service
+        const aiServiceUrl = process.env.AI_SERVICE_URL
+        if (!aiServiceUrl) {
+          throw new Error('AI_SERVICE_URL environment variable is not set')
+        }
+
+        console.log(`Calling AI service at ${aiServiceUrl}/api/v1/extract`)
+        const response = await fetch(`${aiServiceUrl}/api/v1/extract`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            raw_html: rawHtml || '',
+            raw_text: text || '',
+          }),
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`AI Service failed with status ${response.status}: ${errorText}`)
+        }
+
+        const result = await response.json()
+
+        if (!result.success || !result.data) {
+          throw new Error(`AI Service returned unsuccessful result: ${result.error || 'Unknown error'}`)
+        }
+
+        const extractedData = result.data
+        console.log(`AI extraction successful for post ${scrapedPostId}, confidence: ${extractedData.confidence_score}`)
+
+        // 2. Save to Database
+        const { prisma } = await import('./prisma')
+
+        // Start a transaction to create Job and update ScrapedPost
+        await prisma.$transaction(async (tx) => {
+          // Create the Job record
+          await tx.job.create({
+            data: {
+              scraped_post_id: scrapedPostId,
+              title: extractedData.job_title,
+              company: extractedData.company,
+              location: extractedData.location,
+              description: text, // Use original text as description or potentially extracted summary
+              requirements: null, // AI service doesn't seem to split this yet, or we can use raw text
+              skills: extractedData.skills || [],
+              salary_range: extractedData.salary_range,
+              job_type: extractedData.job_type,
+              experience_level: extractedData.experience_required,
+              source_url: postUrl,
+              status: 'active',
+              posted_date: new Date(), // Approximate
+            }
+          })
+
+          // Mark ScrapedPost as processed
+          await tx.scrapedPost.update({
+            where: { id: scrapedPostId },
+            data: { processed: true }
+          })
+        })
+
+        console.log(`Saved extracted job data for post ${scrapedPostId}`)
+
         return {
           success: true,
           scrapedPostId,
-          extractedData: {
-            jobTitle: null,
-            company: null,
-            location: null,
-            salary: null,
-            requirements: [],
-            description: text,
-          },
+          extractedData
         }
       } catch (error) {
         console.error(`AI extraction failed for post ${scrapedPostId}:`, error)
