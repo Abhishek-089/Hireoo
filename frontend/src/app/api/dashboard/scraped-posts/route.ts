@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     // Derive emails from text and filter to posts that have at least one email
     const postsWithEmails = posts
-      .map((post) => {
+      .map((post: any) => {
         const emails = extractEmails(post.text || "")
         return {
           id: post.id,
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
           emails,
         }
       })
-      .filter((post) => post.emails.length > 0)
+      .filter((post: any) => post.emails.length > 0)
 
     return NextResponse.json({
       posts: postsWithEmails,
@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
+
 
 
 
