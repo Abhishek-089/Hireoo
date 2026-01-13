@@ -304,7 +304,7 @@ export class JobMatchingService {
       },
     })
 
-    return matches.map(match => ({
+    return matches.map((match: any) => ({
       id: match.id,
       job: match.job,
       embeddingSimilarity: match.embedding_similarity,
