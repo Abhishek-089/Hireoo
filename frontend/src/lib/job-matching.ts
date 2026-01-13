@@ -228,7 +228,7 @@ export class JobMatchingService {
   private static async saveMatchesToDatabase(matchResults: MatchResult[]): Promise<void> {
     try {
       // Use transaction to ensure data consistency
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         for (const result of matchResults) {
           // Check if match already exists
           const existingMatch = await tx.jobMatch.findUnique({
