@@ -203,7 +203,7 @@ export async function triggerMatchingForUnmatchedJobs(): Promise<{
     console.log(`Found ${unmatchedJobs.length} unmatched jobs`)
 
     // Queue matching for these jobs
-    const jobIds = unmatchedJobs.map(job => job.id)
+    const jobIds = unmatchedJobs.map((job: any) => job.id)
     const result = await matchMultipleJobsToUsers(jobIds)
 
     return {

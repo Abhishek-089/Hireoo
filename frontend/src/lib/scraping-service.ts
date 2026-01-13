@@ -28,17 +28,17 @@ export class ScrapingService {
       // Check if THIS USER has already scraped this post (based on linkedin_id or post_url)
       // Important: Check per-user, not globally, so different users can scrape the same post
       const orConditions: any[] = []
-      
+
       // Only add post_url if it's not empty
       if (postData.post_url && postData.post_url.trim()) {
         orConditions.push({ post_url: postData.post_url.trim() })
       }
-      
+
       // Only add linkedin_id if it exists and is not empty
       if (postData.linkedin_id && postData.linkedin_id.trim()) {
         orConditions.push({ linkedin_id: postData.linkedin_id.trim() })
       }
-      
+
       // If no valid identifiers, we can't check for duplicates, but we'll still try to save
       if (orConditions.length === 0) {
         console.warn(`[ScrapingService] Post has no valid identifiers (post_url or linkedin_id), will save anyway:`, {
@@ -138,7 +138,7 @@ export class ScrapingService {
         message: error.message,
         stack: error.stack
       } : { error: String(error) }
-      
+
       console.error('[ScrapingService] Error details:', errorDetails)
       throw new Error(`Failed to store scraped post: ${errorMessage}`)
     }
@@ -177,7 +177,7 @@ export class ScrapingService {
       }
     } catch (error) {
       // Silently ignore queue errors - post storage is more important
-      console.warn('[ScrapingService] Could not queue for AI extraction (non-critical):', 
+      console.warn('[ScrapingService] Could not queue for AI extraction (non-critical):',
         error instanceof Error ? error.message : 'Unknown error')
     }
   }
@@ -258,7 +258,7 @@ export class ScrapingService {
         },
       })
 
-      return posts.map(post => ({
+      return posts.map((post: any) => ({
         id: post.id,
         preview: post.text.substring(0, 200) + (post.text.length > 200 ? '...' : ''),
         postUrl: post.post_url,

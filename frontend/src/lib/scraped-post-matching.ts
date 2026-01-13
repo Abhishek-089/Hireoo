@@ -237,11 +237,11 @@ export class ScrapedPostMatchingService {
       ])
 
       const totalMatched = matches.length
-      const totalShown = matches.filter((m) => m.shown_to_user).length
-      const totalApplied = matches.filter((m) => m.applied).length
-      const goodMatches = matches.filter((m) => m.match_quality === 'good').length
-      const mediumMatches = matches.filter((m) => m.match_quality === 'medium').length
-      const badMatches = matches.filter((m) => m.match_quality === 'bad').length
+      const totalShown = matches.filter((m: any) => m.shown_to_user).length
+      const totalApplied = matches.filter((m: any) => m.applied).length
+      const goodMatches = matches.filter((m: any) => m.match_quality === 'good').length
+      const mediumMatches = matches.filter((m: any) => m.match_quality === 'medium').length
+      const badMatches = matches.filter((m: any) => m.match_quality === 'bad').length
 
       return {
         totalScraped,
