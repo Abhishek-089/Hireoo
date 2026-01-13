@@ -195,7 +195,7 @@ The email should feel authentic and specifically tailored to this job and candid
         }
       })
 
-      return drafts.map(draft => ({
+      return drafts.map((draft: any) => ({
         id: draft.id,
         job: draft.job,
         match: {
