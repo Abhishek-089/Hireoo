@@ -63,7 +63,7 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
     const activities: ActivityItem[] = []
 
     // Map Applications
-    applications.forEach(app => {
+    applications.forEach((app: any) => {
       let subtitle = `Sent email to ${app.hr_email}`
       if (app.scrapedPost.job?.company && app.scrapedPost.job?.title) {
         subtitle = `Applied for ${app.scrapedPost.job.title} at ${app.scrapedPost.job.company}`
