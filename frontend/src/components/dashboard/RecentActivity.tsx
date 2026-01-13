@@ -94,7 +94,7 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
     })
 
     // Map Replies
-    replies.forEach(reply => {
+    replies.forEach((reply: any) => {
       activities.push({
         id: `reply-${reply.id}`,
         type: 'reply_received',
@@ -112,7 +112,7 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
     })
 
     // Map Matches
-    latestMatches.forEach(post => {
+    latestMatches.forEach((post: any) => {
       if (post.matches[0]) {
         let subtitle = `${post.matches[0].match_score}% Match Score`
         if (post.job?.company) {
