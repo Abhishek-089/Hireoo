@@ -25,19 +25,11 @@ export async function GET(request: NextRequest) {
         id: true,
         email: true,
         name: true,
-        onboarding_step: true,
       },
     })
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    if (user.onboarding_step < 7) {
-      return NextResponse.json(
-        { error: "Onboarding not complete" },
-        { status: 403 }
-      )
     }
 
     const now = Math.floor(Date.now() / 1000)
