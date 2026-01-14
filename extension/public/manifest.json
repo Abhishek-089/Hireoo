@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Hireoo - AI Job Search Assistant",
+  "name": "Hireoo – AI Job Assistant",
   "version": "1.0.0",
-  "description": "Automate your job search with AI-powered LinkedIn scraping and personalized cold emails",
+  "description": "Automate your job discovery and outreach with AI-powered opportunity tracking and personalized cold email automation",
   "permissions": [
     "storage",
     "activeTab",
