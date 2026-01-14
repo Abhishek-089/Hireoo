@@ -28,12 +28,13 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user
+    // Create user with onboarding completed (step 7) so extension auth works immediately
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password_hash: hashedPassword,
+        onboarding_step: 7, // Mark onboarding as complete for extension access
       }
     })
 

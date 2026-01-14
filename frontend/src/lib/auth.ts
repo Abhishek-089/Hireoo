@@ -134,6 +134,7 @@ export const authOptions: NextAuthOptions = {
               data: {
                 email: user.email!,
                 name: user.name ?? null,
+                onboarding_step: 7, // Mark onboarding as complete for extension access
               },
             })
           }

@@ -9,7 +9,7 @@ export interface AuthUser {
 export class ExtensionAuth {
   private static readonly STORAGE_KEY = 'hireoo_auth'
   // Base URL for the Hireoo web app API
-  private static readonly API_BASE_URL = 'https://hireoo-taupe.vercel.app'
+  private static readonly API_BASE_URL = import.meta.env.VITE_APP_URL || 'http://localhost:3000'
 
   // Store authentication data
   static async setAuthData(user: AuthUser): Promise<void> {

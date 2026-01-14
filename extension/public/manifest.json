@@ -14,7 +14,7 @@
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://*.hireoo.com/*",
-    "http://localhost:3000/*"
+    "https://hireoo-taupe.vercel.app/*"
   ],
   "background": {
     "service_worker": "src/background/background.ts",
@@ -42,7 +42,7 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["http://localhost:3000/*", "https://app.hireoo.com/*"],
+      "matches": ["https://hireoo-taupe.vercel.app/*", "https://app.hireoo.com/*"],
       "js": ["src/content/auth-bridge.ts"],
       "run_at": "document_idle"
     }
