@@ -30,7 +30,7 @@ export class HiddenRunner {
    */
   private buildSearchUrl(keywords: string): string {
     const encodedKeywords = encodeURIComponent(keywords)
-    return `https://www.linkedin.com/search/results/content/?contentType=jobs&keywords=${encodedKeywords}&origin=SWITCH_SEARCH_VERTICAL`
+    return `https://www.linkedin.com/search/results/content/?keywords=${encodedKeywords}&origin=SWITCH_SEARCH_VERTICAL`
   }
 
   static getInstance(): HiddenRunner {
@@ -92,7 +92,9 @@ export class HiddenRunner {
       console.log(`[HiddenRunner] Scraping keywords: "${this.SEARCH_KEYWORDS}"`)
 
       // Wait for page to load, then initialize
-      console.log(`[HiddenRunner] ⏳ Waiting ${this.PAGE_LOAD_WAIT / 1000}s for page to load...`)
+      // Increased wait time for hidden tabs which throttle cpu
+      const adjustedWait = this.PAGE_LOAD_WAIT + 4000;
+      console.log(`[HiddenRunner] ⏳ Waiting ${adjustedWait / 1000}s for page to load...`)
 
       // Also wait for tab to be fully loaded
       const tabId = tab.id!
@@ -103,7 +105,7 @@ export class HiddenRunner {
           setTimeout(async () => {
             await this.initializeRunner()
             this.scheduleStop()
-          }, 2000) // Additional 2s wait for content to render
+          }, 4000) // Increased: Additional 4s wait for content to render in background
         }
       }
       chrome.tabs.onUpdated.addListener(listener)
@@ -116,7 +118,7 @@ export class HiddenRunner {
           await this.initializeRunner()
           this.scheduleStop()
         }
-      }, this.PAGE_LOAD_WAIT + 3000) // Extra 3s buffer
+      }, adjustedWait + 5000) // Extra 5s buffer
 
       // Set up activity monitoring
       this.monitorActivity()
@@ -182,8 +184,18 @@ export class HiddenRunner {
     console.log('[HiddenRunner] 📍 Tab ID:', this.hiddenTabId)
 
     // Wait a bit more and check if tab is ready
-    console.log('[HiddenRunner] ⏳ Waiting 2s for tab to be fully ready...')
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    console.log('[HiddenRunner] ⏳ Waiting 5s for tab to be fully ready and content to load...')
+    await new Promise(resolve => setTimeout(resolve, 5000))
+
+    // Check if page is loaded by checking for main content
+    try {
+      const pageStatus = await chrome.tabs.sendMessage(this.hiddenTabId, {
+        type: 'CHECK_PAGE_READY'
+      })
+      console.log('[HiddenRunner] Page status:', pageStatus)
+    } catch (error) {
+      console.warn('[HiddenRunner] Could not check page status:', error)
+    }
 
     try {
       // Perform initial scrape of visible posts
@@ -243,12 +255,43 @@ export class HiddenRunner {
             count: response.count || 0,
             hasPosts: !!(response.posts && response.posts.length > 0)
           })
+          console.log('[HiddenRunner] 🔍 Full response object:', response)
+          console.log('[HiddenRunner] 🔍 Response.posts type:', typeof response.posts)
+          console.log('[HiddenRunner] 🔍 Response.posts is Array:', Array.isArray(response.posts))
+          if (response.posts && response.posts.length > 0) {
+            console.log('[HiddenRunner] 🔍 First post sample:', response.posts[0])
+          }
         }
       } catch (err) {
         error = err
         console.warn('[HiddenRunner] ⚠️ Content script not ready, injecting manually...', err)
 
+        if (!this.hiddenTabId) {
+          console.error('[HiddenRunner] ❌ Cannot inject script: tab ID is missing');
+          return;
+        }
+
         try {
+          // --- DIRECT DEBUG INJECTION ---
+          console.log('[HiddenRunner] 🕵️ Injecting direct DOM analyzer...');
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: this.hiddenTabId },
+            func: () => {
+              const main = document.querySelector('main');
+              return {
+                url: window.location.href,
+                bodyText: document.body.innerText.substring(0, 200),
+                mainTag: main ? main.tagName : 'N/A',
+                mainClasses: main ? main.className : 'N/A',
+                mainChildren: main ? Array.from(main.children).map(c => ({ tag: c.tagName, class: c.className })) : []
+              };
+            }
+          });
+          if (results && results[0]) {
+            console.log('[HiddenRunner] 🕵️ DOM Analysis Result:', JSON.stringify(results[0].result, null, 2));
+          }
+          // ------------------------------
+
           // As a fallback, inject the scraping content script and try again (same as manual scraping)
           console.log('[HiddenRunner] 💉 Injecting scraping content script...')
           await chrome.scripting.executeScript({
@@ -271,7 +314,7 @@ export class HiddenRunner {
       }
 
       if (!response) {
-        console.error('[HiddenRunner] ❌ No response from content script')
+        console.error('[HiddenRunner] ❌ No response from content script', error)
         return
       }
 

@@ -71,9 +71,24 @@ function buildPostPayload(opts: {
 }
 
 // ---------------- Network interception (fetch / XHR, read-only) ----------------
+
+// ---------------- Visibility Shim ----------------
+function mockVisibility() {
+  try {
+    Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+
+    // requestAnimationFrame shim removed to prevent sdui calculation errors
+  } catch (e) {
+    console.warn('Failed to mock visibility:', e);
+  }
+}
+
 function initInterceptionOnce() {
   if (interceptionInitialized) return
   interceptionInitialized = true
+
+  mockVisibility(); // Apply visibility shim
 
   const origFetch = window.fetch
   window.fetch = async (...args: any[]) => {
@@ -249,11 +264,17 @@ export class LinkedInScraper {
       'div.feed-shared-update-v2',
       'div.feed-shared-update-v2__container',
       '.update-components-card',
-      // Search results page selectors
+      // Search results page selectors (expanded)
       '.reusable-search__result-container',
       '.search-result__wrapper',
       '.search-results__list-item',
-      'div[data-chameleon-result-urn]'
+      'div[data-chameleon-result-urn]',
+      'li.reusable-search__result-container',
+      'div.search-result',
+      'li.search-result',
+      'div.entity-result',
+      'li.entity-result',
+      '.jobs-search-results__list-item'
     ].join(','),
     text_selectors: [
       '[data-test-id="feed-item-content"]',
@@ -266,7 +287,8 @@ export class LinkedInScraper {
       '.search-result__snippet',
       '.search-result__summary',
       '.search-result__content',
-      '.search-result__description'
+      '.search-result__description',
+      'div.update-components-text'
     ],
     author_selectors: [
       '[data-test-id="profile-name"] a',
@@ -303,7 +325,8 @@ export class LinkedInScraper {
       'join our team', 'join us', 'open position', 'open role',
       'career opportunity', 'job opening', 'vacancy', 'positions available',
       'talent acquisition', 'headcount', 'growing team', 'expand',
-      'remote work', 'remote position', 'work from home'
+      'remote work', 'remote position', 'work from home',
+      'freelance', 'contract', 'project', 'developer needed', 'developer wanted'
     ],
   }
 
@@ -411,13 +434,44 @@ export class LinkedInScraper {
 
   // Main scraping function
   async scrapeVisiblePosts(): Promise<LinkedInPost[]> {
+    // Send debug info to background
+    const sendDebug = (msg: string, data?: any) => {
+      chrome.runtime.sendMessage({
+        type: 'SCRAPER_DEBUG',
+        message: msg,
+        data: data
+      }).catch(() => { })
+    }
+
+    console.log(`[Scraper] 🚀 Starting scrape - ${new Date().toISOString()}`)
+    sendDebug('scrapeVisiblePosts called', { url: window.location.href, timestamp: new Date().toISOString() })
+
     await this.ensureConfigLoaded()
+    sendDebug('Config loaded', { configLoaded: this.configLoaded })
 
     // Check if we're on a search results page - if so, scrape ALL posts (no keyword filter)
     const isSearchResultsPage = window.location.href.includes('/search/results/content/')
     console.log(`[Scraper] Page type: ${isSearchResultsPage ? 'Search Results' : 'Feed'}`)
+    sendDebug('Page type detected', { isSearchResultsPage, url: window.location.href })
     if (isSearchResultsPage) {
       console.log(`[Scraper] 🔍 Search results page detected - will scrape ALL posts (no keyword filter)`)
+    }
+
+    // Check for login page redirection
+    if (window.location.href.includes('linkedin.com/auth') ||
+      window.location.href.includes('linkedin.com/login') ||
+      document.querySelector('.login-form') ||
+      document.body.innerText.includes('Sign in to LinkedIn')) {
+      console.warn('[Scraper] ⚠️ Detected login page! User needs to sign in.')
+      return []
+    }
+
+    // Check for "No results found"
+    const noResultsEl = document.querySelector('.search-no-results__container') ||
+      document.querySelector('.search-results__no-results-message');
+    if (noResultsEl) {
+      console.warn('[Scraper] ⚠️ "No results found" message detected on page.')
+      return []
     }
 
     const posts: LinkedInPost[] = []
@@ -434,15 +488,6 @@ export class LinkedInScraper {
       console.log(`[Scraper] Found ${postElements.length} post containers on page`)
       console.log(`[Scraper] Current URL: ${window.location.href}`)
       console.log(`[Scraper] Is search results page: ${isSearchResultsPage}`)
-
-      // Send debug info to background
-      const sendDebug = (msg: string, data?: any) => {
-        chrome.runtime.sendMessage({
-          type: 'SCRAPER_DEBUG',
-          message: msg,
-          data: data
-        }).catch(() => { })
-      }
 
       sendDebug('Standard selector result', { count: postElements.length, selector: this.config.post_container_selector })
 
@@ -461,7 +506,18 @@ export class LinkedInScraper {
           '.search-results__list-item',
           'ul.search-results__list > li',
           'div[data-urn^="urn:li:activity:"]',
-          'article[data-urn^="urn:li:activity:"]'
+          'article[data-urn^="urn:li:activity:"]',
+          // More aggressive selectors for LinkedIn search results
+          'div[data-urn*="urn:li"]',
+          'article[data-urn*="urn:li"]',
+          'li[data-urn*="urn:li"]',
+          '.reusable-search__entity-result',
+          '.entity-result',
+          '.search-result__container',
+          'div.scaffold-finite-scroll__content > div > ul > li',
+          'main ul > li',
+          'div[class*="search-result"]',
+          'li[class*="search-result"]'
         ]
 
         for (const selector of searchSelectors) {
@@ -478,29 +534,259 @@ export class LinkedInScraper {
       }
 
       // Log page structure for debugging
+      console.log(`[Scraper] 🔍 Debugging: Checking page structure...`)
+
+      const pageInfo = {
+        bodyChildren: document.body.children.length,
+        main: document.querySelector('main')?.children.length || 0,
+        feed: document.querySelector('[data-test-id="feed"]')?.children.length || 0,
+        searchResults: document.querySelector('.search-results')?.children.length || 0,
+        resultsList: document.querySelector('.search-results__list')?.children.length || 0,
+        allArticles: document.querySelectorAll('article').length,
+        allDivsWithUrn: document.querySelectorAll('div[data-urn]').length,
+        allDivsWithChameleon: document.querySelectorAll('div[data-chameleon-result-urn]').length
+      }
+      console.log(`[Scraper] Page structure:`, pageInfo)
+      sendDebug('Page structure check', pageInfo)
+
+      // Body text preview
+      const bodyText = document.body.innerText.substring(0, 500).replace(/\n/g, ' ');
+      console.log(`[Scraper] 📄 Body Text Preview: "${bodyText}..."`);
+      sendDebug('Body Text Preview', { preview: bodyText });
+
       if (postElements.length === 0) {
-        console.log(`[Scraper] 🔍 Debugging: Checking page structure...`)
-        const pageInfo = {
-          bodyChildren: document.body.children.length,
-          main: document.querySelector('main')?.children.length || 0,
-          feed: document.querySelector('[data-test-id="feed"]')?.children.length || 0,
-          searchResults: document.querySelector('.search-results')?.children.length || 0,
-          resultsList: document.querySelector('.search-results__list')?.children.length || 0,
-          allArticles: document.querySelectorAll('article').length,
-          allDivsWithUrn: document.querySelectorAll('div[data-urn]').length,
-          allDivsWithChameleon: document.querySelectorAll('div[data-chameleon-result-urn]').length
+        console.log(`[Scraper] ⚠️ No post elements found! See structure logs above.`)
+        // Try to find ANY elements that might be posts
+        const allPossiblePosts = document.querySelectorAll('div, article, li')
+        console.log(`[Scraper] Found ${allPossiblePosts.length} total div/article/li elements on page`)
+
+        // Try to find elements with URN attributes
+        const urns = document.querySelectorAll('[data-urn], [data-chameleon-result-urn]')
+        console.log(`[Scraper] Found ${urns.length} elements with URN attributes`)
+
+        if (urns.length > 0) {
+          console.log(`[Scraper] Sample URN elements:`, Array.from(urns).slice(0, 3).map(el => ({
+            tag: el.tagName,
+            classes: el.className,
+            urn: el.getAttribute('data-urn') || el.getAttribute('data-chameleon-result-urn')
+          })))
+          // Use URN elements as fallback
+          postElements = urns
+          console.log(`[Scraper] ✅ Using ${urns.length} URN elements as fallback`)
+        } else {
+          // Last resort: try to find any visible content containers
+          const visibleContainers = Array.from(document.querySelectorAll('div, article, li')).filter(el => {
+            const rect = el.getBoundingClientRect()
+            return rect.height > 100 && rect.width > 200 && window.getComputedStyle(el).display !== 'none'
+          })
+          console.log(`[Scraper] Found ${visibleContainers.length} visible containers (height > 100px, width > 200px)`)
+          if (visibleContainers.length > 0 && visibleContainers.length < 50) {
+            // Only use if reasonable number (not too many)
+            postElements = visibleContainers as NodeListOf<Element>
+            console.log(`[Scraper] ✅ Using ${visibleContainers.length} visible containers as last resort`)
+          }
         }
-        console.log(`[Scraper] Page structure:`, pageInfo)
-        sendDebug('Page structure check', pageInfo)
+      }
+
+      // If still no elements found, try the most aggressive selectors
+      if (postElements.length === 0) {
+        console.log(`[Scraper] ⚠️ Still no elements found, trying most aggressive selectors...`)
+        sendDebug('Trying most aggressive selectors')
+
+        // Try to find ANY list items or divs that might contain posts
+        const aggressiveSelectors = [
+          'main ul > li',
+          'main > div > ul > li',
+          'div[class*="search"] > ul > li',
+          'ul[class*="results"] > li',
+          'div.scaffold-finite-scroll__content ul > li',
+          'div[data-view-name="search-results"] ul > li',
+          'section ul > li',
+          'div[role="main"] ul > li'
+        ]
+
+        for (const selector of aggressiveSelectors) {
+          const elements = document.querySelectorAll(selector)
+          console.log(`[Scraper] Aggressive selector "${selector}": found ${elements.length} elements`)
+          sendDebug(`Aggressive selector test: ${selector}`, { count: elements.length })
+          if (elements.length > 0) {
+            console.log(`[Scraper] ✅ Using aggressive selector "${selector}" - found ${elements.length} elements`)
+            sendDebug(`Using aggressive selector: ${selector}`, { count: elements.length })
+            postElements = elements
+            break
+          }
+        }
       }
 
       console.log(`[Scraper] 🔍 Step 2: Processing ${postElements.length} post elements...`)
       sendDebug('Starting post extraction', { totalElements: postElements.length })
 
+      // If still no elements, return early
+      if (postElements.length === 0) {
+        console.log(`[Scraper] ⚠️ No post elements found after all selector attempts`)
+        sendDebug('No elements found', {
+          url: window.location.href,
+          bodyChildren: document.body.children.length,
+          mainExists: !!document.querySelector('main'),
+          mainChildren: document.querySelector('main')?.children.length || 0
+        })
+        return []
+      }
+
+      // Pre-filter elements to skip obvious non-posts
+      // For search results pages, use text-based filtering instead of dimension-based
+      // Note: isSearchResultsPage is already defined above, don't redefine it
+      const minTextLength = isSearchResultsPage ? 50 : 20  // Require substantial text for search results
+      const minHeight = 50  // Minimum height for feed posts
+      const minWidth = 200  // Minimum width for feed posts
+
+      const validPostElements: HTMLElement[] = []
+      let skippedSmall = 0
+      let skippedHidden = 0
+      let skippedNoText = 0
+
+      // Log dimensions and text of first 10 elements for debugging
+      console.log(`[Scraper] 📏 Dimensions and text of first 10 elements:`)
+      for (let i = 0; i < Math.min(10, postElements.length); i++) {
+        const el = postElements[i] as HTMLElement
+        const rect = el.getBoundingClientRect()
+        // Get text from element and all its descendants
+        const text = this.getAllVisibleText(el).trim()
+        const textPreview = text.substring(0, 100)
+        console.log(`[Scraper] Element ${i}: ${rect.height}px x ${rect.width}px, textLength: ${text.length}, text: "${textPreview}..."`)
+        sendDebug(`Element ${i} dimensions`, {
+          index: i,
+          height: rect.height,
+          width: rect.width,
+          textLength: text.length,
+          textPreview: textPreview,
+          tag: el.tagName,
+          classes: el.className.substring(0, 100)
+        })
+      }
+
       for (let i = 0; i < postElements.length; i++) {
-        const postElement = postElements[i]
+        const el = postElements[i] as HTMLElement
+        const rect = el.getBoundingClientRect()
+
+        // For search results pages, skip dimension filtering and rely on text content
+        // For regular feed pages, still filter by dimensions
+        if (!isSearchResultsPage) {
+          if (rect.height < minHeight || rect.width < minWidth) {
+            skippedSmall++
+            if (i < 10) {
+              console.log(`[Scraper] ⚠️ Skipped small element ${i}: ${rect.height}px x ${rect.width}px (min: ${minHeight}px x ${minWidth}px)`)
+            }
+            continue
+          }
+        } else {
+          // For search results, only skip if element is completely hidden or has zero size
+          if (rect.height === 0 && rect.width === 0) {
+            skippedSmall++
+            continue
+          }
+        }
+
+        // Skip elements that are hidden
+        const style = window.getComputedStyle(el)
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) {
+          skippedHidden++
+          if (i < 5) { // Log first 5 skipped for debugging
+            sendDebug('Skipped hidden element (pre-filter)', {
+              index: i,
+              display: style.display,
+              visibility: style.visibility,
+              opacity: style.opacity,
+              tag: el.tagName
+            })
+          }
+          continue
+        }
+
+        // Skip elements with very little text content (likely navigation items)
+        // For search results, check both innerText and textContent, and also check child elements
+        // Be very aggressive in finding text - check all descendants
+        let quickText = this.getAllVisibleText(el)
+
+        // For search results pages, if the element itself is small but might be part of a larger post container,
+        // try to find the parent container that has more text
+        let elementToUse: HTMLElement = el
+        if (isSearchResultsPage && quickText.trim().length < minTextLength && rect.width < 100) {
+          // Look for parent elements that might contain the actual post
+          let parent = el.parentElement
+          let attempts = 0
+          while (parent && attempts < 5) {
+            const parentText = this.getAllVisibleText(parent)
+            const parentRect = parent.getBoundingClientRect()
+            // If parent has substantial text and reasonable size, use it instead
+            if (parentText.trim().length >= minTextLength && parentRect.width > 200) {
+              console.log(`[Scraper] ✅ Found parent container with ${parentText.trim().length} chars for element ${i}`)
+              sendDebug('Using parent container', {
+                originalIndex: i,
+                parentTag: parent.tagName,
+                parentTextLength: parentText.trim().length,
+                parentWidth: parentRect.width
+              })
+              elementToUse = parent as HTMLElement
+              quickText = parentText
+              break
+            }
+            parent = parent.parentElement
+            attempts++
+          }
+        }
+
+        // For search results, be very lenient - only skip if there's absolutely no text
+        if (quickText.trim().length < minTextLength) {
+          skippedNoText++
+          if (i < 10) { // Log first 10 skipped for debugging
+            console.log(`[Scraper] ⚠️ Skipped element ${i} with little text: ${quickText.trim().length} chars (min: ${minTextLength})`)
+            sendDebug('Skipped element with little text (pre-filter)', {
+              index: i,
+              textLength: quickText.trim().length,
+              minTextLength,
+              textPreview: quickText.trim().substring(0, 100),
+              tag: el.tagName,
+              classes: el.className.substring(0, 50)
+            })
+          }
+          continue
+        }
+
+        // Check if we've already added this element (to avoid duplicates from parent lookup)
+        if (!validPostElements.includes(elementToUse)) {
+          validPostElements.push(elementToUse)
+          if (i < 5) { // Log first 5 valid elements for debugging
+            const finalRect = elementToUse.getBoundingClientRect()
+            sendDebug('Valid element (pre-filter)', {
+              index: i,
+              height: finalRect.height,
+              width: finalRect.width,
+              textLength: quickText.trim().length,
+              tag: elementToUse.tagName,
+              classes: elementToUse.className.substring(0, 50),
+              isParent: elementToUse !== el
+            })
+          }
+        }
+      }
+
+      console.log(`[Scraper] ✅ Pre-filtered: ${validPostElements.length} valid post elements out of ${postElements.length} total`)
+      console.log(`[Scraper] 📊 Pre-filter stats: ${skippedSmall} skipped (small), ${skippedHidden} skipped (hidden), ${skippedNoText} skipped (no text)`)
+      sendDebug('Pre-filtered elements', {
+        valid: validPostElements.length,
+        total: postElements.length,
+        skippedSmall,
+        skippedHidden,
+        skippedNoText,
+        isSearchResultsPage,
+        thresholds: { minHeight, minWidth, minTextLength }
+      })
+
+      for (let i = 0; i < validPostElements.length; i++) {
+        const postElement = validPostElements[i]
         try {
-          console.log(`[Scraper] Processing element ${i + 1}/${postElements.length}...`)
+          console.log(`[Scraper] Processing element ${i + 1}/${validPostElements.length}...`)
           const post = this.extractPostData(postElement as HTMLElement, isSearchResultsPage)
           totalFound++
 
@@ -562,8 +848,10 @@ export class LinkedInScraper {
         ? `[Scraper] Summary: ${posts.length} posts scraped from search results, ${skippedDuplicate} skipped (duplicates), ${totalFound} total processed`
         : `[Scraper] Summary: ${posts.length} new hiring posts, ${skippedNoKeywords} skipped (no keywords), ${skippedDuplicate} skipped (duplicates in this session), ${totalFound} total processed`
       console.log(summaryMsg)
+      sendDebug('Scrape completed', { postsFound: posts.length, totalProcessed: totalFound })
     } catch (error) {
       console.error('[Scraper] Error scraping posts:', error)
+      sendDebug('Scrape error', { error: error instanceof Error ? error.message : String(error) })
     }
 
     return posts
@@ -571,17 +859,137 @@ export class LinkedInScraper {
 
   private extractPostData(postElement: HTMLElement, skipKeywordFilter: boolean = false): LinkedInPost | null {
     try {
-      // Extract post ID from data attributes
-      const urn = postElement.getAttribute('data-urn') || postElement.getAttribute('data-chameleon-result-urn') || ''
-      const postId = urn.split(':').pop() || `post_${Date.now()}_${Math.random()}`
+      // Send debug info to background
+      const sendDebug = (msg: string, data?: any) => {
+        chrome.runtime.sendMessage({
+          type: 'SCRAPER_DEBUG',
+          message: msg,
+          data: data
+        }).catch(() => { })
+      }
+
+      // Check if we're on a search results page for less aggressive filtering
+      const isSearchResultsPage = window.location.href.includes('/search/results/content/')
+      const minHeight = isSearchResultsPage ? 30 : 50
+      const minWidth = isSearchResultsPage ? 100 : 200
+      const minTextLength = isSearchResultsPage ? 10 : 20
+
+      // Extract post ID from data attributes (check element and its children)
+      let urn = postElement.getAttribute('data-urn') || postElement.getAttribute('data-chameleon-result-urn') || ''
+
+      // If no URN on element, check child elements (more aggressively for search results)
+      if (!urn) {
+        const urnChild = postElement.querySelector('[data-urn], [data-chameleon-result-urn]')
+        if (urnChild) {
+          urn = urnChild.getAttribute('data-urn') || urnChild.getAttribute('data-chameleon-result-urn') || ''
+        }
+        // For search results, also check deeper in the tree
+        if (!urn && isSearchResultsPage) {
+          const deepUrn = postElement.querySelector('[data-urn*="urn:li"], [data-chameleon-result-urn*="urn:li"]')
+          if (deepUrn) {
+            urn = deepUrn.getAttribute('data-urn') || deepUrn.getAttribute('data-chameleon-result-urn') || ''
+          }
+        }
+      }
+
+      // Extract post ID from URN
+      let postId = ''
+      if (urn) {
+        const parts = urn.split(':')
+        postId = parts[parts.length - 1] || ''
+      }
+
+      // If still no ID, generate one
+      if (!postId) {
+        postId = `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }
+
+      // Quick check: skip elements that are clearly not posts (too small, no content)
+      const rect = postElement.getBoundingClientRect()
+      const elementHeight = rect.height
+      const elementWidth = rect.width
+
+      // Skip very small elements (likely navigation items, buttons, etc.)
+      // Use less aggressive thresholds for search results
+      if (elementHeight < minHeight || elementWidth < minWidth) {
+        sendDebug('Skipping small element in extractPostData', {
+          height: elementHeight,
+          width: elementWidth,
+          tag: postElement.tagName,
+          minHeight,
+          minWidth,
+          isSearchResultsPage
+        })
+        return null
+      }
 
       // Extract post text via layered selectors; fallback to all visible text
-      const { text, html } = this.getTextFromSelectors(postElement, this.config.text_selectors)
+      // For search results pages, be more aggressive in finding text
+      let { text, html } = this.getTextFromSelectors(postElement, this.config.text_selectors)
+
+      // If no text found and we're on search results, try more aggressive selectors
+      if (!text && isSearchResultsPage) {
+        // Try common search result text containers
+        const searchTextSelectors = [
+          '.search-result__snippet',
+          '.search-result__summary',
+          '.search-result__content',
+          '.search-result__description',
+          '[class*="snippet"]',
+          '[class*="summary"]',
+          '[class*="description"]',
+          'p',
+          'div[class*="text"]'
+        ]
+        for (const sel of searchTextSelectors) {
+          const el = postElement.querySelector(sel)
+          if (el && this.isVisible(el as HTMLElement)) {
+            const foundText = (el.textContent || '').trim()
+            if (foundText && foundText.length > minTextLength) {
+              text = foundText
+              html = (el as HTMLElement).innerHTML || ''
+              sendDebug('Found text via search-specific selector', { selector: sel, textLength: text.length })
+              break
+            }
+          }
+        }
+      }
+
       const fallbackText = !text ? this.getAllVisibleText(postElement) : ''
       const combinedText = text || fallbackText
 
+      // Log extraction attempt
+      sendDebug('Extracting post data', {
+        elementTag: postElement.tagName,
+        elementClasses: postElement.className.substring(0, 100),
+        hasUrn: !!urn,
+        textLength: combinedText?.length || 0,
+        textPreview: combinedText?.substring(0, 100) || 'NO TEXT',
+        elementHeight,
+        elementWidth,
+        isSearchResultsPage,
+        foundViaSelector: !!text,
+        foundViaFallback: !!fallbackText
+      })
+
       // If no text found, skip this post
       if (!combinedText || combinedText.trim().length === 0) {
+        sendDebug('Skipping: No text found', {
+          elementTag: postElement.tagName,
+          isSearchResultsPage
+        })
+        return null
+      }
+
+      // Require minimum text length to filter out navigation items, buttons, etc.
+      // Use less aggressive threshold for search results pages
+      if (combinedText.trim().length < minTextLength) {
+        sendDebug('Skipping: Text too short', {
+          textLength: combinedText.trim().length,
+          minTextLength,
+          text: combinedText.trim().substring(0, 100),
+          isSearchResultsPage
+        })
         return null
       }
 
@@ -591,6 +999,7 @@ export class LinkedInScraper {
 
       // On search results page, skip keyword filtering - accept all posts with text
       if (!skipKeywordFilter && !hasHiringKeywords) {
+        sendDebug('Skipping: No hiring keywords', { textPreview: combinedText.substring(0, 100) })
         return null
       }
 
@@ -607,11 +1016,29 @@ export class LinkedInScraper {
       // Extract post URL
       let postUrl = this.getHrefFromSelectors(postElement, this.config.post_link_selectors)
 
-      // If we couldn't find the URL via selectors, construct it from the post ID
-      if (!postUrl && postId && !postId.startsWith('post_')) {
-        // postId should be the numeric ID from the URN (e.g., "7408913474199941120")
-        // Construct LinkedIn post URL
-        postUrl = `/feed/update/urn:li:activity:${postId}`
+      // If no URL found via selectors, try to find any link in the element
+      if (!postUrl) {
+        const anyLink = postElement.querySelector('a[href*="/feed/update/"], a[href*="/posts/"], a[href*="/activity/"]') as HTMLAnchorElement | null
+        if (anyLink && anyLink.href) {
+          postUrl = anyLink.href
+        } else if (anyLink && anyLink.getAttribute('href')) {
+          postUrl = anyLink.getAttribute('href')!
+        }
+      }
+
+      // If we couldn't find the URL via selectors, construct it from the post ID or URN
+      if (!postUrl) {
+        if (urn && urn.includes('urn:li:activity:')) {
+          // Extract numeric ID from URN
+          const activityId = urn.split(':').pop() || ''
+          if (activityId) {
+            postUrl = `/feed/update/urn:li:activity:${activityId}`
+          }
+        } else if (postId && !postId.startsWith('post_')) {
+          // postId should be the numeric ID from the URN (e.g., "7408913474199941120")
+          // Construct LinkedIn post URL
+          postUrl = `/feed/update/urn:li:activity:${postId}`
+        }
       }
 
       const rawText = combinedText.trim()
@@ -619,6 +1046,9 @@ export class LinkedInScraper {
 
       // Extract engagement data (simplified)
       const engagement = this.extractEngagement(postElement)
+
+      // Determine hasHiringKeywords: true if keywords found OR if we're on search results (skip filter)
+      const finalHasHiringKeywords = hasHiringKeywords || skipKeywordFilter
 
       return {
         id: postId,
@@ -633,7 +1063,7 @@ export class LinkedInScraper {
         postUrl: postUrl ? (postUrl.startsWith('http') ? postUrl : `https://www.linkedin.com${postUrl}`) : (postId && !postId.startsWith('post_') ? `https://www.linkedin.com/feed/update/urn:li:activity:${postId}` : ''),
         engagement,
         scrapedAt: Date.now(),
-        hasHiringKeywords: true
+        hasHiringKeywords: finalHasHiringKeywords
       }
     } catch (error) {
       console.error('Error extracting post data:', error)
@@ -681,13 +1111,38 @@ export class LinkedInScraper {
     console.log(`[Scraper] 📜 Starting scroll action #${this.scrollCount + 1}...`)
 
     // Smooth scroll down
-    window.scrollBy({
-      top: scrollAmount,
-      behavior: 'smooth'
-    })
+
+    // 1. Try scrolling window first
+    window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+
+    // 2. Try scrolling documentElement and body (often needed for hidden/headless tabs)
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+    }
+    document.body.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+
+    // 3. Try scrolling potential main containers (common in SPAs)
+    const mainContainer = document.querySelector('.scaffold-layout__main') ||
+      document.querySelector('main') ||
+      document.querySelector('.application-outlet');
+
+    if (mainContainer) {
+      mainContainer.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+    }
+
+    // Wait for scroll to complete
+    await new Promise(resolve => setTimeout(resolve, 800));
 
     this.lastScrollPosition = window.scrollY
     this.scrollCount++
+
+    // If scroll didn't move much (end of page?), try scrolling to bottom of body to force trigger
+    // But be careful - if we scrolled a container, window.scrollY might not change!
+    if (Math.abs(this.lastScrollPosition - beforeScroll) < 10) {
+      console.log('[Scraper] ⚠️ Window scroll didn\'t change position, but container scroll might have worked.');
+      // Force trigger by scrolling to bottom if we really think it's stuck
+      // window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
 
     console.log(`[Scraper] ✅ Scrolled ${scrollAmount.toFixed(0)}px to position ${this.lastScrollPosition}px`)
     return Promise.resolve()
@@ -763,22 +1218,30 @@ async function handleScrapingMessage(message: any, sender: chrome.runtime.Messag
       return { success: true, message: 'Scraper session reset' }
 
     case 'SCRAPE_VISIBLE_POSTS':
-      // Send debug info to background script
+      // Send debug info to background script (always send, not conditional)
       const sendDebugToBackground = (msg: string, data?: any) => {
-        if (message.debug) {
-          chrome.runtime.sendMessage({
-            type: 'SCRAPER_DEBUG',
-            message: msg,
-            data: data
-          }).catch(() => { }) // Ignore errors if no listener
-        }
+        chrome.runtime.sendMessage({
+          type: 'SCRAPER_DEBUG',
+          message: msg,
+          data: data
+        }).catch(() => { }) // Ignore errors if no listener
       }
 
       sendDebugToBackground('Starting scrape', { url: window.location.href })
+      console.log('[Scraper] 📡 SCRAPE_VISIBLE_POSTS received, calling scrapeVisiblePosts...')
 
       // Try LinkedInScraper first (more comprehensive)
-      const scraperPosts = await scraper!.scrapeVisiblePosts()
-      sendDebugToBackground('Scraper completed', { postsFound: scraperPosts.length })
+      let scraperPosts: LinkedInPost[] = []
+      try {
+        scraperPosts = await scraper!.scrapeVisiblePosts()
+        sendDebugToBackground('Scraper completed', { postsFound: scraperPosts.length })
+        console.log(`[Scraper] ✅ scrapeVisiblePosts returned ${scraperPosts.length} posts`)
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        sendDebugToBackground('Scraper error', { error: errorMsg })
+        console.error('[Scraper] ❌ Error in scrapeVisiblePosts:', error)
+        // Return empty array on error, don't throw
+      }
 
       // Also check network buffer and DOM fallback for additional posts
       const cap = Math.min(message.cap || DEFAULT_CAP, DEFAULT_CAP)
@@ -824,6 +1287,24 @@ async function handleScrapingMessage(message: any, sender: chrome.runtime.Messag
       await scraper!.scrapeVisiblePosts() // this triggers ensureConfigLoaded
       return { success: true }
 
+    case 'CHECK_PAGE_READY':
+      // Check if page is ready for scraping
+      const hasMain = !!document.querySelector('main')
+      const hasContent = document.body.children.length > 0
+      const url = window.location.href
+      const isLinkedIn = url.includes('linkedin.com')
+      const isSearchResults = url.includes('/search/results/')
+      return {
+        success: true,
+        hasMain,
+        hasContent,
+        isLinkedIn,
+        isSearchResults,
+        url,
+        bodyChildren: document.body.children.length,
+        mainChildren: document.querySelector('main')?.children.length || 0
+      }
+
     default:
       // Ignore unknown messages (e.g. LINKEDIN_PAGE_LOADED) so we don't spam errors
       return { success: false, message: `Ignored message type: ${message.type}` }
@@ -831,12 +1312,22 @@ async function handleScrapingMessage(message: any, sender: chrome.runtime.Messag
 }
 
 // Auto-initialize on page load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeScraper)
-} else {
-  initializeScraper()
-}
+try {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      try {
+        initializeScraper()
+      } catch (error) {
+        console.error('[Scraper] Error during DOMContentLoaded initialization:', error)
+      }
+    })
+  } else {
+    initializeScraper()
+  }
 
-console.log('LinkedIn scraping content script loaded')
+  console.log('LinkedIn scraping content script loaded')
+} catch (error) {
+  console.error('[Scraper] Error during script initialization:', error)
+}
 
 

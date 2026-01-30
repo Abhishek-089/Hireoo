@@ -47,15 +47,22 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 })
 
 // Handle tab updates for LinkedIn detection
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url?.includes('linkedin.com')) {
+    // Wait a bit for content script to load
+    await new Promise(resolve => setTimeout(resolve, 100))
+
     // Notify content script that we're on LinkedIn
-    chrome.tabs.sendMessage(tabId, {
-      type: 'LINKEDIN_PAGE_LOADED',
-      url: tab.url,
-    }).catch(() => {
-      // Content script might not be ready yet, ignore
-    })
+    // Use try-catch to prevent console errors
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'LINKEDIN_PAGE_LOADED',
+        url: tab.url,
+      })
+    } catch (error) {
+      // Content script might not be ready yet, silently ignore
+      // This is expected behavior and not an error
+    }
   }
 })
 
@@ -71,15 +78,15 @@ async function handleMessage(
       const user = await ExtensionAuth.loginWithJWT(request.jwt)
 
       // Notify any open popups that auth status changed
-      try {
-        chrome.runtime.sendMessage({
-          type: 'AUTH_STATUS_CHANGED',
-          authenticated: true,
-          user,
-        })
-      } catch {
-        // If no listeners, ignore
-      }
+      // Use promise catch to prevent console errors
+      chrome.runtime.sendMessage({
+        type: 'AUTH_STATUS_CHANGED',
+        authenticated: true,
+        user,
+      }).catch(() => {
+        // If no listeners, silently ignore
+        // This is expected when popup is closed
+      })
 
       return user
 
@@ -217,7 +224,7 @@ async function handleLinkedInScraping(request: any, sender: chrome.runtime.Messa
 
   const posts = response?.posts || []
   console.log(`[Background] LinkedIn scraping returned ${posts.length} posts`)
-  
+
   // Log all scraped posts
   if (posts.length > 0) {
     console.log(`[Background] Scraped posts data:`, posts.map(p => ({
@@ -303,12 +310,16 @@ async function checkAuthenticationStatus(): Promise<void> {
 
   if (!isAuthenticated) {
     // Notify popup that user needs to login
-    chrome.runtime.sendMessage({
-      type: 'AUTH_STATUS_CHANGED',
-      authenticated: false,
-    }).catch(() => {
-      // Popup might not be open, ignore
-    })
+    // Only send if popup is open to avoid console errors
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'AUTH_STATUS_CHANGED',
+        authenticated: false,
+      })
+    } catch {
+      // Popup is not open, silently ignore
+      // This is expected behavior
+    }
   }
 }
 

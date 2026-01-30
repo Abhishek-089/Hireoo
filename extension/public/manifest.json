@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hireoo – AI Job Assistant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automate your job discovery and outreach with AI-powered opportunity tracking and personalized cold email automation",
   "permissions": [
     "storage",
@@ -32,25 +32,42 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/*"],
-      "js": ["src/content/content.ts"],
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "src/content/content.ts"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://www.linkedin.com/*"],
-      "js": ["src/content/scraping.ts"],
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "src/content/scraping.ts"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://hireoo-taupe.vercel.app/*", "https://app.hireoo.com/*"],
-      "js": ["src/content/auth-bridge.ts"],
+      "matches": [
+        "https://hireoo-taupe.vercel.app/*",
+        "https://app.hireoo.com/*"
+      ],
+      "js": [
+        "src/content/auth-bridge.ts"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["offscreen.html"],
-      "matches": ["https://www.linkedin.com/*"]
+      "resources": [
+        "src/offscreen/offscreen.html"
+      ],
+      "matches": [
+        "https://www.linkedin.com/*"
+      ]
     }
   ]
 }

@@ -3,23 +3,21 @@ console.log('Hireoo content script loaded on LinkedIn')
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message: any, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
-  // Only log non-scraping messages to reduce noise
-  if (message.type !== 'SCRAPE_VISIBLE_POSTS' && message.type !== 'PERFORM_SCROLL') {
-    console.log('Content script received message:', message)
+  // Only handle messages that this script is responsible for
+  const handledTypes = ['LINKEDIN_PAGE_LOADED', 'SCRAPE_JOBS', 'GET_PAGE_INFO']
+
+  if (!handledTypes.includes(message.type)) {
+    // Don't respond - let other content scripts (like scraping.ts) handle it
+    return false
   }
+
+  console.log('Content script received message:', message)
 
   handleContentMessage(message, sender)
     .then(sendResponse)
     .catch((error) => {
-      // Only log errors for messages we actually handle
-      // Unknown messages (like SCRAPE_VISIBLE_POSTS) are handled by scraping.js
-      if (message.type === 'LINKEDIN_PAGE_LOADED' || message.type === 'SCRAPE_JOBS' || message.type === 'GET_PAGE_INFO') {
-        console.error('Content script error:', error)
-        sendResponse({ error: error.message })
-      } else {
-        // Silently ignore unknown messages (they're handled by other scripts)
-        sendResponse({ success: false, ignored: true })
-      }
+      console.error('Content script error:', error)
+      sendResponse({ error: error.message })
     })
 
   return true // Keep message channel open for async response
@@ -37,8 +35,8 @@ async function handleContentMessage(message: any, sender: chrome.runtime.Message
       return getPageInfo()
 
     default:
-      // Ignore unknown message types (they may be handled by other content scripts like scraping.js)
-      return { success: false, message: `Unknown message type: ${message.type}` }
+      // This should never happen since we filter messages in the listener
+      throw new Error(`Unexpected message type: ${message.type}`)
   }
 }
 
@@ -122,9 +120,9 @@ function observeJobCards(): void {
 
             // Check if this is a job card
             if (element.matches('[data-job-id]') ||
-                element.querySelector('[data-job-id]') ||
-                element.matches('.job-card-container') ||
-                element.querySelector('.job-card-container')) {
+              element.querySelector('[data-job-id]') ||
+              element.matches('.job-card-container') ||
+              element.querySelector('.job-card-container')) {
 
               // Add Hireoo action button to job card
               addJobCardActions(element as HTMLElement)
@@ -214,16 +212,16 @@ function extractJobInfo(jobCard: HTMLElement): any {
   // This is a placeholder implementation - will be enhanced in the scraping module
 
   const title = jobCard.querySelector('[data-job-title]')?.textContent ||
-               jobCard.querySelector('.job-card-list__title')?.textContent ||
-               'Unknown Title'
+    jobCard.querySelector('.job-card-list__title')?.textContent ||
+    'Unknown Title'
 
   const company = jobCard.querySelector('[data-organization-name]')?.textContent ||
-                 jobCard.querySelector('.job-card-container__company-name')?.textContent ||
-                 'Unknown Company'
+    jobCard.querySelector('.job-card-container__company-name')?.textContent ||
+    'Unknown Company'
 
   const location = jobCard.querySelector('[data-job-location]')?.textContent ||
-                  jobCard.querySelector('.job-card-container__metadata-item')?.textContent ||
-                  'Unknown Location'
+    jobCard.querySelector('.job-card-container__metadata-item')?.textContent ||
+    'Unknown Location'
 
   return {
     title: title?.trim(),
