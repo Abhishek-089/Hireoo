@@ -3,6 +3,9 @@ import type { Metadata } from "next"
 export const metadata: Metadata = {
   title: "Privacy Policy - Hireoo",
   description: "Learn how Hireoo protects your privacy and handles your data securely.",
+  alternates: {
+    canonical: "/privacy",
+  },
 }
 
 export default function PrivacyPage() {
@@ -47,9 +50,9 @@ export default function PrivacyPage() {
               <li>Email metadata (subject, timestamps, sender/recipient info)</li>
             </ul>
 
-            <h3 className="text-xl font-medium text-gray-900 mb-3">2.3 LinkedIn Data</h3>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">2.3 Professional Network Data</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              Through our Chrome extension, we collect job posting information from LinkedIn, including:
+              Through our Chrome extension, we collect job posting information from professional networks, including:
             </p>
             <ul className="list-disc pl-6 text-gray-700 mb-4">
               <li>Job titles, descriptions, and requirements</li>

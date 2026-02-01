@@ -3,14 +3,17 @@ import { FeatureGrid } from "@/components/feature-grid"
 
 export const metadata: Metadata = {
   title: "Features - Hireoo",
-  description: "Explore all the powerful features of Hireoo's AI-powered job search automation platform. From LinkedIn scraping to personalized cold emails.",
+  description: "Explore all the powerful features of Hireoo's AI-powered job search automation platform. From job discovery to personalized cold emails.",
+  alternates: {
+    canonical: "/features",
+  },
 }
 
 export default function FeaturesPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24">
+      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
@@ -20,7 +23,7 @@ export default function FeaturesPage() {
               </span>
             </h1>
             <p className="mt-6 text-lg leading-8 text-gray-600">
-              Everything you need to automate your job search, from LinkedIn scraping to personalized outreach.
+              Everything you need to automate your job search, from opportunity discovery to personalized outreach.
             </p>
           </div>
         </div>
@@ -30,7 +33,7 @@ export default function FeaturesPage() {
       <FeatureGrid />
 
       {/* Additional Feature Details */}
-      <div className="py-24 bg-gray-50">
+      <div className="py-24 sm:py-32 bg-gray-50">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center mb-16">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
@@ -47,9 +50,9 @@ export default function FeaturesPage() {
               <div className="mx-auto h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">
                 <span className="text-2xl font-bold text-blue-600">1</span>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Connect & Scrape</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">Connect & Capture</h3>
               <p className="text-gray-600">
-                Install our Chrome extension and connect your Gmail. Browse LinkedIn as usual - we handle the scraping automatically.
+                Install our Chrome extension and connect your Gmail. Browse job boards as usual - we handle the data capture automatically.
               </p>
             </div>
 

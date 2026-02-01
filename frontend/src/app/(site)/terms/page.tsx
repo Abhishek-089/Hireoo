@@ -3,6 +3,9 @@ import type { Metadata } from "next"
 export const metadata: Metadata = {
   title: "Terms of Service - Hireoo",
   description: "Read Hireoo's Terms of Service and understand the rules for using our AI-powered job search automation platform.",
+  alternates: {
+    canonical: "/terms",
+  },
 }
 
 export default function TermsPage() {
@@ -28,7 +31,7 @@ export default function TermsPage() {
               Hireoo provides an automated job search platform that includes:
             </p>
             <ul className="list-disc pl-6 text-gray-700 mb-4">
-              <li>Chrome extension for LinkedIn job scraping</li>
+              <li>Chrome extension for professional network data capture</li>
               <li>AI-powered job matching and analysis</li>
               <li>Automated cold email generation and sending via Gmail</li>
               <li>Dashboard for tracking applications and responses</li>

@@ -6,7 +6,10 @@ import Link from "next/link"
 
 export const metadata: Metadata = {
   title: "How It Works - Hireoo",
-  description: "Learn how Hireoo's AI-powered job search automation works. From LinkedIn scraping to personalized cold emails in 4 simple steps.",
+  description: "Learn how Hireoo's AI-powered job search automation works. From opportunity discovery to personalized cold emails in 4 simple steps.",
+  alternates: {
+    canonical: "/how-it-works",
+  },
 }
 
 const steps = [
@@ -24,14 +27,14 @@ const steps = [
   },
   {
     step: 2,
-    title: "AI Scraping & Analysis",
-    description: "Browse LinkedIn as usual. Our AI automatically extracts and analyzes job postings in real-time.",
+    title: "AI Analysis & Capture",
+    description: "Browse job boards as usual. Our AI automatically extracts and analyzes job postings in real-time.",
     icon: Brain,
     details: [
-      "Real-time LinkedIn post scraping",
-      "AI-powered job description analysis",
+      "Real-time job post analysis",
+      "AI-powered job description parsing",
       "Company information extraction",
-      "Requirements and skills parsing"
+      "Requirements and skills analysis"
     ]
   },
   {
@@ -73,7 +76,7 @@ export default function HowItWorksPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24">
+      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
@@ -98,7 +101,7 @@ export default function HowItWorksPage() {
       </div>
 
       {/* Steps Section */}
-      <div className="py-24 bg-white">
+      <div className="py-24 sm:py-32 bg-white">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="space-y-24">
             {steps.map((step, index) => (
@@ -137,7 +140,7 @@ export default function HowItWorksPage() {
       </div>
 
       {/* Benefits Section */}
-      <div className="py-24 bg-gray-50">
+      <div className="py-24 sm:py-32 bg-gray-50">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center mb-16">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
@@ -164,7 +167,7 @@ export default function HowItWorksPage() {
       </div>
 
       {/* CTA Section */}
-      <div className="py-24 bg-blue-600">
+      <div className="py-24 sm:py-32 bg-blue-600">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">

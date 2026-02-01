@@ -46,7 +46,7 @@ export function Footer() {
               <span className="text-2xl font-bold text-blue-600">Hireoo</span>
             </Link>
             <p className="mt-4 text-gray-600 text-sm leading-relaxed">
-              Automate your job search with AI-powered LinkedIn scraping and personalized cold emailing.
+              Automate your job search with AI-powered job discovery and personalized cold emailing.
               Connect your Gmail, install our Chrome extension, and let AI do the work.
             </p>
             <div className="mt-6 flex space-x-4">

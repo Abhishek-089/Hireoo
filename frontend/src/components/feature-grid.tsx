@@ -14,14 +14,14 @@ const features = [
   {
     icon: Chrome,
     title: "Chrome Extension",
-    description: "One-click installation. Automatically scrapes LinkedIn hiring posts as you browse.",
+    description: "One-click installation. Automatically captures professional hiring posts as you browse.",
     color: "text-blue-600",
     bgColor: "bg-blue-50"
   },
   {
     icon: Brain,
     title: "AI Job Matching",
-    description: "Our AI analyzes your resume and skills to find the perfect job matches from scraped data.",
+    description: "Our AI analyzes your resume and skills to find the perfect job matches from captured data.",
     color: "text-purple-600",
     bgColor: "bg-purple-50"
   },
@@ -42,7 +42,7 @@ const features = [
   {
     icon: Clock,
     title: "Automated Workflows",
-    description: "Set up automated sequences: scrape → match → email → follow-up. Work smarter, not harder.",
+    description: "Set up automated sequences: capture → match → email → follow-up. Work smarter, not harder.",
     color: "text-indigo-600",
     bgColor: "bg-indigo-50"
   },
@@ -78,7 +78,7 @@ export function FeatureGrid() {
             Everything you need to land your dream job
           </h2>
           <p className="mt-6 text-lg leading-8 text-gray-600">
-            From LinkedIn scraping to personalized cold emails, we automate the entire job search process
+            From opportunity discovery to personalized cold emails, we automate the entire job search process
             so you can focus on what matters most - preparing for interviews.
           </p>
         </div>

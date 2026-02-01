@@ -1,3 +1,4 @@
+
 import { ScrapedPostsClient } from "./ScrapedPostsClient"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
@@ -19,191 +20,88 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
   const pageSize = 10
   const currentPage = page < 1 ? 1 : page
 
-  let rawPosts: Array<{
-    id: string
-    text: string
-    post_url: string
-    created_at: Date
-    matches: Array<{
-      match_score: number
-      match_quality: string
-      matched_at: Date
-      applied: boolean
-      applied_at: Date | null
-    }>
-    applications: Array<{
-      id: string
-      sent_at: Date
-      gmail_thread_id: string | null
-      hr_email: string | null
-    }>
-  }> = []
-  let rawAppliedPosts: Array<{
-    id: string
-    text: string
-    post_url: string
-    created_at: Date
-    matches: Array<{
-      match_score: number
-      match_quality: string
-      matched_at: Date
-      applied: boolean
-      applied_at: Date | null
-    }>
-    applications: Array<{
-      id: string
-      sent_at: Date
-      gmail_thread_id: string | null
-      hr_email: string | null
-    }>
-  }> = []
+  let rawPosts: any[] = []
+  let rawAppliedPosts: any[] = []
   let totalCount = 0
-  try {
-    const baseWhere: any = {
-      user_id: (session.user as any).id,
-      // quick pre-filter: only posts whose text contains '@'
-      text: { contains: "@" },
-    }
 
+  try {
     const [rows, count, appliedRows] = await Promise.all([
-      // Get non-applied posts
-      prisma.scrapedPost.findMany({
+      // Get matched posts (Actionable matches)
+      prisma.scrapedPostMatch.findMany({
         where: {
-          ...baseWhere,
-          NOT: {
-            OR: [
-              {
-                matches: {
-                  some: {
-                    user_id: (session.user as any).id,
-                    applied: true,
-                  },
-                },
-              },
-              {
-                applications: {
-                  some: {
-                    user_id: (session.user as any).id,
-                  },
-                },
-              },
-            ],
-          },
+          user_id: (session.user as any).id,
+          applied: false,
         },
         include: {
-          matches: {
-            where: {
-              user_id: (session.user as any).id,
-            },
-            select: {
-              match_score: true,
-              match_quality: true,
-              matched_at: true,
-              applied: true,
-              applied_at: true,
-            },
-            take: 1,
-          },
-          applications: {
-            where: {
-              user_id: (session.user as any).id,
-            },
-            select: {
-              id: true,
-              sent_at: true,
-              gmail_thread_id: true,
-              hr_email: true,
-            },
-            orderBy: { sent_at: "desc" },
-            take: 1,
-          },
+          scrapedPost: {
+            include: {
+              job: true
+            }
+          }
         },
-        orderBy: { created_at: "desc" },
+        orderBy: { matched_at: "desc" },
         skip: (currentPage - 1) * pageSize,
         take: pageSize,
       }),
-      prisma.scrapedPost.count({
+
+      // Count total matches
+      prisma.scrapedPostMatch.count({
         where: {
-          ...baseWhere,
-          NOT: {
-            OR: [
-              {
-                matches: {
-                  some: {
-                    user_id: (session.user as any).id,
-                    applied: true,
-                  },
-                },
-              },
-              {
-                applications: {
-                  some: {
-                    user_id: (session.user as any).id,
-                  },
-                },
-              },
-            ],
-          },
+          user_id: (session.user as any).id,
+          applied: false,
         },
       }),
-      // Get applied posts
-      prisma.scrapedPost.findMany({
+
+      // Get applied matches
+      prisma.scrapedPostMatch.findMany({
         where: {
-          ...baseWhere,
-          OR: [
-            {
-              matches: {
-                some: {
-                  user_id: (session.user as any).id,
-                  applied: true,
-                },
-              },
-            },
-            {
-              applications: {
-                some: {
-                  user_id: (session.user as any).id,
-                },
-              },
-            },
-          ],
+          user_id: (session.user as any).id,
+          applied: true,
         },
         include: {
-          matches: {
-            where: {
-              user_id: (session.user as any).id,
-            },
-            select: {
-              match_score: true,
-              match_quality: true,
-              matched_at: true,
-              applied: true,
-              applied_at: true,
-            },
-            take: 1,
-          },
-          applications: {
-            where: {
-              user_id: (session.user as any).id,
-            },
-            select: {
-              id: true,
-              sent_at: true,
-              gmail_thread_id: true,
-              hr_email: true,
-            },
-            orderBy: { sent_at: "desc" },
-            take: 1,
-          },
+          scrapedPost: {
+            include: {
+              job: true,
+              applications: {
+                where: {
+                  user_id: (session.user as any).id,
+                },
+                select: {
+                  id: true,
+                  sent_at: true,
+                  gmail_thread_id: true,
+                  hr_email: true,
+                },
+                orderBy: { sent_at: "desc" },
+                take: 1,
+              },
+            }
+          }
         },
-        orderBy: { created_at: "desc" },
-        take: 20, // Show up to 20 applied posts
+        orderBy: { applied_at: "desc" },
+        take: 20,
       }),
     ])
 
-    rawPosts = rows
-    rawAppliedPosts = appliedRows
+    // Helper to map match to post structure
+    const mapMatchToPost = (match: any) => ({
+      id: match.scrapedPost.id,
+      text: match.text_content || match.scrapedPost.text,
+      post_url: match.scrapedPost.post_url,
+      created_at: match.scrapedPost.created_at,
+      match_score: match.match_score,
+      match_quality: match.match_quality,
+      matched_at: match.matched_at,
+      applied: match.applied,
+      applied_at: match.applied_at,
+      job: match.scrapedPost.job,
+      applications: match.scrapedPost.applications || []
+    });
+
+    rawPosts = rows.map(mapMatchToPost)
+    rawAppliedPosts = appliedRows.map(mapMatchToPost)
     totalCount = count
+
   } catch (error) {
     console.error("ScrapedPosts failed to load from database:", error)
     rawPosts = []
@@ -211,32 +109,46 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
     totalCount = 0
   }
 
-  // Process non-applied posts
-  const posts = rawPosts
-    .map((post: any) => {
-      const emails = extractEmails(post.text || "")
-      const match = post.matches[0]
-      return {
-        id: post.id,
-        text: post.text,
-        postUrl: post.post_url,
-        emails,
-        createdAt: post.created_at.toISOString(),
-        matchScore: match?.match_score ?? null,
-        matchQuality: match?.match_quality ?? null,
-        applied: false,
-      }
-    })
-    // Show all posts, not just ones with emails
-    // .filter((post) => post.emails.length > 0)
+  // Helper to format post with job data if available
+  const enrichPost = (post: any) => {
+    // Check if we have enriched job data
+    const job = post.job;
+    const isEnriched = !!job;
 
-  // Process applied posts and fetch email replies
-  const appliedPostsWithReplies = await Promise.all(
+    return {
+      id: post.id,
+      text: post.text || "",
+      postUrl: post.post_url,
+      emails: extractEmails(post.text || ""),
+      createdAt: post.created_at.toISOString(),
+      matchScore: post.match_score ?? null,
+      matchQuality: post.match_quality ?? null,
+      applied: post.applied === true,
+      appliedAt: post.applied_at,
+      isEnriched: isEnriched,
+      jobData: job ? {
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        skills: job.skills,
+        salary: job.salary_range,
+        postedDate: job.posted_date?.toISOString(),
+        description: job.description
+      } : null
+    };
+  }
+
+  // Process non-applied posts
+  const posts = rawPosts.map((post: any) => {
+    return enrichPost(post);
+  })
+
+  // Process applied posts
+  const appliedPosts = await Promise.all(
     rawAppliedPosts.map(async (post: any) => {
-      const emails = extractEmails(post.text || "")
-      const match = post.matches[0]
-      const application = post.applications[0]
-      
+      const enriched = enrichPost(post);
+      const application = post.applications[0];
+
       // Fetch email replies if thread_id exists
       let replies: Array<{
         id: string
@@ -246,10 +158,9 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
         received_at: Date
         is_read: boolean
       }> = []
-      
+
       if (application?.gmail_thread_id) {
         try {
-          // Find email logs for this thread that are replies (received messages)
           const emailLogs = await prisma.emailLog.findMany({
             where: {
               user_id: (session.user as any).id,
@@ -265,44 +176,34 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
               sent_at: true,
             },
             orderBy: { sent_at: 'desc' },
-            take: 5, // Get up to 5 most recent replies
+            take: 5,
           })
-          
+
           replies = emailLogs.map((log: any) => ({
             id: log.id,
             from_email: log.from_email,
             subject: log.subject,
             body_text: log.snippet || '',
             received_at: log.sent_at,
-            is_read: false, // EmailLog doesn't have is_read, but we can add it later
+            is_read: false,
           }))
         } catch (error) {
           console.error('Error fetching email replies:', error)
         }
       }
-      
+
       return {
-        id: post.id,
-        text: post.text,
-        postUrl: post.post_url,
-        emails,
-        createdAt: post.created_at.toISOString(),
-        matchScore: match?.match_score ?? null,
-        matchQuality: match?.match_quality ?? null,
+        ...enriched,
         applied: true,
-        appliedAt: match?.applied_at || application?.sent_at || null,
+        appliedAt: post.applied_at || application?.sent_at || null,
         applicationId: application?.id || null,
         hrEmail: application?.hr_email || null,
         threadId: application?.gmail_thread_id || null,
         replies: replies,
-        hasReplies: replies.length > 0,
+        hasReplies: replies.length > 0
       }
     })
   )
-  
-  // Show all applied posts, not just ones with emails
-  const appliedPosts = appliedPostsWithReplies
-  // .filter((post) => post.emails.length > 0)
 
   const totalPages = totalCount > 0 ? Math.ceil(totalCount / pageSize) : 1
   const showingFrom =
@@ -339,4 +240,3 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
     </>
   )
 }
-

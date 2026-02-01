@@ -346,6 +346,7 @@ model ScrapedPostMatch {
   shown_at        DateTime? // When it was first shown
   applied          Boolean   @default(false) // Whether user applied to this post
   applied_at      DateTime?
+  text_content    String?   @db.Text // Cached text content for enrichment
 
   user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
   scrapedPost ScrapedPost @relation(fields: [scraped_post_id], references: [id], onDelete: Cascade)

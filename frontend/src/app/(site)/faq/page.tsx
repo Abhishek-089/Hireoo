@@ -7,7 +7,7 @@ import { useState } from "react"
 const faqs = [
   {
     question: "What is Hireoo and how does it work?",
-    answer: "Hireoo is an AI-powered job search automation platform that scrapes LinkedIn hiring posts, matches them with your profile, and sends personalized cold emails through your Gmail account. Simply install our Chrome extension, connect your Gmail, and let AI do the work."
+    answer: "Hireoo is an AI-powered job search automation platform that captures hiring posts from professional networks, matches them with your profile, and sends personalized cold emails through your Gmail account. Simply install our Chrome extension, connect your Gmail, and let AI do the work."
   },
   {
     question: "Is my Gmail data secure?",
@@ -50,8 +50,8 @@ const faqs = [
     answer: "Yes! You can create multiple campaigns for different types of roles, industries, or locations. Each campaign can have its own settings, email templates, and targeting criteria."
   },
   {
-    question: "What if LinkedIn changes their layout?",
-    answer: "Our team monitors LinkedIn changes and updates our scraping technology accordingly. We use robust selectors and AI-powered content recognition to ensure reliable scraping even when layouts change."
+    question: "What if job board layouts change?",
+    answer: "Our team monitors platform changes and updates our capture technology accordingly. We use robust selectors and AI-powered content recognition to ensure reliable extraction even when layouts change."
   }
 ]
 
@@ -82,7 +82,7 @@ export default function FAQPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24">
+      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
@@ -99,7 +99,7 @@ export default function FAQPage() {
       </div>
 
       {/* FAQ Section */}
-      <div className="py-24 bg-white">
+      <div className="py-24 sm:py-32 bg-white">
         <div className="mx-auto max-w-4xl px-6 lg:px-8">
           <div className="space-y-4">
             {faqs.map((faq, index) => (
@@ -110,7 +110,7 @@ export default function FAQPage() {
       </div>
 
       {/* Still Need Help Section */}
-      <div className="py-24 bg-gray-50">
+      <div className="py-24 sm:py-32 bg-gray-50">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <HelpCircle className="mx-auto h-16 w-16 text-blue-600 mb-6" />

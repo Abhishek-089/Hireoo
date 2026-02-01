@@ -75,7 +75,18 @@ export async function POST(request: NextRequest) {
         updateData.onboarding_step = 4 // 4 = Dashboard
       }
     }
-    // Legacy fallback or additional handling
+    // Legacy fallback: Handle old step-based format (e.g., from ScrapedPostsClient resume modal)
+    else if (step === 2 && data.fileUrl) {
+      // Legacy resume upload format from job application modal
+      await prisma.resume.create({
+        data: {
+          user_id: (session!.user as any).id,
+          file_url: data.fileUrl,
+          file_name: data.fileName || 'resume',
+        }
+      })
+      updateData.resume_uploaded = true
+    }
     else {
       // If generic step number logic needed
     }

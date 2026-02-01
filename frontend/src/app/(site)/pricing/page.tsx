@@ -7,6 +7,9 @@ import Link from "next/link"
 export const metadata: Metadata = {
   title: "Pricing - Hireoo",
   description: "Choose the perfect plan for your job search automation needs. Start free and scale as you grow.",
+  alternates: {
+    canonical: "/pricing",
+  },
 }
 
 const comparisonFeatures = [
@@ -64,7 +67,7 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24">
+      <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
@@ -84,7 +87,7 @@ export default function PricingPage() {
       <PricingTable />
 
       {/* Feature Comparison */}
-      <div className="py-24 bg-white">
+      <div className="py-24 sm:py-32 bg-white">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center mb-16">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
@@ -139,7 +142,7 @@ export default function PricingPage() {
       </div>
 
       {/* FAQ Section */}
-      <div className="py-24 bg-gray-50">
+      <div className="py-24 sm:py-32 bg-gray-50">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center mb-16">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">

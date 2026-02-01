@@ -2,11 +2,15 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Menu, X } from "lucide-react"
+
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
+  const pathname = usePathname()
 
   const navItems = [
     { name: "Home", href: "/" },
@@ -33,7 +37,12 @@ export function Navbar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className="text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors"
+                className={cn(
+                  "px-3 py-2 text-sm font-medium transition-colors",
+                  pathname === item.href
+                    ? "text-blue-600"
+                    : "text-gray-700 hover:text-blue-600"
+                )}
               >
                 {item.name}
               </Link>
@@ -42,11 +51,17 @@ export function Navbar() {
 
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-4">
-            <Link href="/signin">
-              <Button variant="ghost">Sign In</Button>
+            <Link
+              href="/signin"
+              className={cn(buttonVariants({ variant: "ghost" }), "cursor-pointer")}
+            >
+              Sign In
             </Link>
-            <Link href="/signup">
-              <Button>Get Started</Button>
+            <Link
+              href="/signup"
+              className={cn(buttonVariants({ variant: "default" }), "cursor-pointer")}
+            >
+              Get Started
             </Link>
           </div>
 
@@ -70,7 +85,12 @@ export function Navbar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className="text-gray-700 hover:text-blue-600 block px-3 py-2 text-base font-medium"
+                className={cn(
+                  "block px-3 py-2 text-base font-medium",
+                  pathname === item.href
+                    ? "text-blue-600 bg-blue-50"
+                    : "text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                )}
                 onClick={() => setIsOpen(false)}
               >
                 {item.name}
@@ -78,13 +98,17 @@ export function Navbar() {
             ))}
             <div className="pt-4 pb-3 border-t border-gray-200">
               <div className="flex flex-col space-y-2">
-                <Link href="/signin">
-                  <Button variant="ghost" className="w-full justify-start">
-                    Sign In
-                  </Button>
+                <Link
+                  href="/signin"
+                  className={cn(buttonVariants({ variant: "ghost" }), "w-full justify-start cursor-pointer")}
+                >
+                  Sign In
                 </Link>
-                <Link href="/signup">
-                  <Button className="w-full">Get Started</Button>
+                <Link
+                  href="/signup"
+                  className={cn(buttonVariants({ variant: "default" }), "w-full cursor-pointer")}
+                >
+                  Get Started
                 </Link>
               </div>
             </div>

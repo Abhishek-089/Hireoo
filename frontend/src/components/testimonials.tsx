@@ -32,7 +32,7 @@ const testimonials = [
     role: "Data Scientist",
     company: "Netflix",
     image: "/globe.svg",
-    content: "The Chrome extension makes scraping LinkedIn posts effortless. Combined with the AI email generation, it's like having a personal recruiter working 24/7.",
+    content: "The Chrome extension makes capturing job opportunities from professional networks effortless. Combined with the AI email generation, it's like having a personal recruiter working 24/7.",
     rating: 5
   },
   {
@@ -55,7 +55,7 @@ const testimonials = [
 
 export function Testimonials() {
   return (
-    <div className="py-24 sm:py-32">
+    <div className="py-16 sm:py-20">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">

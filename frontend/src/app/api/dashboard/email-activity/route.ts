@@ -4,6 +4,26 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+// Helper function to extract company name from email domain
+function getCompanyFromEmail(email: string): string {
+  try {
+    const domain = email.split('@')[1]
+    if (!domain) return 'Company'
+
+    // Remove common email providers
+    const commonProviders = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com']
+    if (commonProviders.includes(domain.toLowerCase())) {
+      return email.split('@')[0] // Use email username if it's a personal email
+    }
+
+    // Extract company name from domain (e.g., "google.com" -> "Google")
+    const companyName = domain.split('.')[0]
+    return companyName.charAt(0).toUpperCase() + companyName.slice(1)
+  } catch {
+    return 'Company'
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -126,8 +146,8 @@ export async function GET(request: NextRequest) {
         appliedAt: app.sent_at,
         hrEmail: app.hr_email,
         job: {
-          title: app.scrapedPost.job?.title || "Unknown Position",
-          company: app.scrapedPost.job?.company || "Unknown Company",
+          title: app.scrapedPost.job?.title || "Job Application",
+          company: app.scrapedPost.job?.company || getCompanyFromEmail(app.hr_email),
           url: app.scrapedPost.post_url
         },
         thread: {

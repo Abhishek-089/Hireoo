@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { signIn } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,6 +31,16 @@ type ScrapedPostItem = {
   threadId?: string | null
   replies?: EmailReply[]
   hasReplies?: boolean
+  isEnriched?: boolean
+  jobData?: {
+    title?: string | null
+    company?: string | null
+    location?: string | null
+    skills?: string[]
+    salary?: string | null
+    postedDate?: string | null
+    description?: string | null
+  } | null
 }
 
 type PaginationInfo = {
@@ -49,7 +59,7 @@ function formatDate(dateString: string) {
 export function ScrapedPostsClient({
   posts,
   pagination,
-  title = "Scraped Posts from LinkedIn",
+  title = "Discovered Jobs",
   showAppliedBadge = false,
 }: {
   posts: ScrapedPostItem[]
@@ -72,6 +82,27 @@ export function ScrapedPostsClient({
   const [gmailModalOpen, setGmailModalOpen] = useState(false)
 
   const { currentPage, totalPages, showingFrom, showingTo, totalCount } = pagination
+
+  // Auto-trigger matching if no posts are found
+  // This helps populate the ScrapedPostMatch table on first load
+  useEffect(() => {
+    if (posts.length === 0 && totalCount === 0) {
+      // Small delay to allow initial load
+      const timer = setTimeout(() => {
+        console.log("No matches found, triggering auto-match...")
+        fetch("/api/scraping/match-posts", { method: "POST" })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.matched > 0) {
+              console.log("Matches found! reloading...")
+              window.location.reload()
+            }
+          })
+          .catch(err => console.error("Auto-match failed", err))
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [posts.length, totalCount])
 
   async function handleApplyClick(post: ScrapedPostItem) {
     setError(null)
@@ -197,11 +228,24 @@ export function ScrapedPostsClient({
     setResumeError(null)
 
     try {
-      // For now, mirror the onboarding step: simulate upload and store URL via onboarding API
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Upload the actual file to Cloudinary
+      const formData = new FormData()
+      formData.append("file", resumeFile)
 
-      const mockUrl = `https://hireoo-resumes.s3.amazonaws.com/${Date.now()}-${resumeFile.name}`
+      const uploadRes = await fetch("/api/upload/resume", {
+        method: "POST",
+        body: formData,
+      })
 
+      if (!uploadRes.ok) {
+        const uploadData = await uploadRes.json().catch(() => ({}))
+        setResumeError(uploadData.error || "Failed to upload resume. Please try again.")
+        return
+      }
+
+      const { url: cloudinaryUrl } = await uploadRes.json()
+
+      // Save the real Cloudinary URL to the database
       const res = await fetch("/api/onboarding/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -209,7 +253,7 @@ export function ScrapedPostsClient({
           step: 2,
           data: {
             skipped: false,
-            fileUrl: mockUrl,
+            fileUrl: cloudinaryUrl,
             fileName: resumeFile.name,
           },
         }),
@@ -256,13 +300,17 @@ export function ScrapedPostsClient({
         )}
         {posts.length === 0 ? (
           <div className="text-center py-6 text-sm text-gray-600">
-            No scraped posts yet. Use the Chrome extension on LinkedIn
-            and we&apos;ll show scraped posts here.
+            No jobs discovered yet. Use the Chrome extension to
+            find job opportunities.
           </div>
         ) : (
           <div className="space-y-4">
             {posts.map((post) => {
               const primaryEmail = post.emails[0]
+
+              // Helper to check if we should show the enriched view
+              const showEnriched = post.isEnriched && post.jobData;
+
               const preview =
                 post.text.length > 220 ? post.text.slice(0, 220).trim() + "…" : post.text
 
@@ -274,7 +322,53 @@ export function ScrapedPostsClient({
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <p className="text-sm text-gray-900 whitespace-pre-line flex-1">{preview}</p>
+                        <div className="flex-1">
+                          {showEnriched ? (
+                            <div className="mb-2">
+                              {/* Enriched Job Header */}
+                              <h3 className="text-lg font-semibold text-gray-900 leading-tight">
+                                {post.jobData?.title && post.jobData.title !== "Unknown Title"
+                                  ? post.jobData.title
+                                  : ""}
+                              </h3>
+                              <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                                {post.jobData?.company && post.jobData.company !== "Unknown Company" && (
+                                  <span className="font-medium bg-gray-100 px-2 py-0.5 rounded text-gray-800">
+                                    {post.jobData.company}
+                                  </span>
+                                )}
+                                {post.jobData?.location && (
+                                  <span>• {post.jobData.location}</span>
+                                )}
+                                {post.jobData?.salary && (
+                                  <span className="text-green-700 font-medium">• {post.jobData.salary}</span>
+                                )}
+                              </div>
+
+                              {/* Skills */}
+                              {post.jobData?.skills && post.jobData.skills.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2 mb-3">
+                                  {post.jobData.skills.slice(0, 5).map(skill => (
+                                    <Badge key={skill} variant="outline" className="text-xs py-0 h-5 border-blue-200 bg-blue-50 text-blue-700">
+                                      {skill}
+                                    </Badge>
+                                  ))}
+                                  {post.jobData.skills.length > 5 && (
+                                    <span className="text-xs text-gray-500 self-center">+{post.jobData.skills.length - 5} more</span>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Description Preview */}
+                              <p className="text-sm text-gray-600 line-clamp-3 mt-1 cursor-pointer hover:text-gray-900 whitespace-pre-line" title="Click to view full description">
+                                {post.jobData?.description?.slice(0, 300) || preview}
+                              </p>
+                            </div>
+                          ) : (
+                            // Raw Text Fallback
+                            <p className="text-sm text-gray-900 whitespace-pre-line">{preview}</p>
+                          )}
+                        </div>
                         {post.matchScore !== null && post.matchQuality && (
                           <div className="flex items-center gap-2 shrink-0">
                             <Badge
@@ -282,29 +376,27 @@ export function ScrapedPostsClient({
                                 post.matchQuality === 'good'
                                   ? 'default'
                                   : post.matchQuality === 'medium'
-                                  ? 'secondary'
-                                  : 'outline'
+                                    ? 'secondary'
+                                    : 'outline'
                               }
-                              className={`flex items-center gap-1 ${
-                                post.matchQuality === 'good'
-                                  ? 'bg-green-100 text-green-800 border-green-300'
-                                  : post.matchQuality === 'medium'
+                              className={`flex items-center gap-1 ${post.matchQuality === 'good'
+                                ? 'bg-green-100 text-green-800 border-green-300'
+                                : post.matchQuality === 'medium'
                                   ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
                                   : 'bg-gray-100 text-gray-800 border-gray-300'
-                              }`}
+                                }`}
                             >
                               <Star className="h-3 w-3" />
                               {Math.round(post.matchScore)}%
                             </Badge>
                             <Badge
                               variant="outline"
-                              className={`text-xs ${
-                                post.matchQuality === 'good'
-                                  ? 'border-green-300 text-green-700'
-                                  : post.matchQuality === 'medium'
+                              className={`text-xs ${post.matchQuality === 'good'
+                                ? 'border-green-300 text-green-700'
+                                : post.matchQuality === 'medium'
                                   ? 'border-yellow-300 text-yellow-700'
                                   : 'border-gray-300 text-gray-700'
-                              }`}
+                                }`}
                             >
                               {post.matchQuality.charAt(0).toUpperCase() + post.matchQuality.slice(1)} match
                             </Badge>
@@ -346,7 +438,7 @@ export function ScrapedPostsClient({
                   <div className="flex items-center justify-between mt-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-gray-500">
-                        Scraped at {formatDate(post.createdAt)}
+                        Discovered at {formatDate(post.createdAt)}
                       </span>
                       {post.applied && post.appliedAt && (
                         <Badge
@@ -384,7 +476,7 @@ export function ScrapedPostsClient({
                       </span>
                     )}
                   </div>
-                  
+
                   {/* Show email replies if any */}
                   {post.applied && post.hasReplies && post.replies && post.replies.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-200">

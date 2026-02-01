@@ -21,7 +21,7 @@ export class ScrapedPostMatchingService {
       const [post, user] = await Promise.all([
         prisma.scrapedPost.findUnique({
           where: { id: scrapedPostId },
-          select: { id: true, text: true, user_id: true },
+          select: { id: true, text: true, user_id: true, post_url: true },
         }),
         prisma.user.findUnique({
           where: { id: userId },
@@ -86,11 +86,18 @@ export class ScrapedPostMatchingService {
         }
       }
 
-      // Check for email address (5% bonus if present)
-      const emailRegex = /[\w\.-]+@[\w\.-]+\.\w+/g
-      if (emailRegex.test(postText)) {
-        matchScore += 5
+      // Check for email address
+      const { extractEmails } = await import('./utils')
+      const emails = extractEmails(postText)
+
+      // CRITICAL: Only match if an email is present
+      if (emails.length === 0) {
+        console.log(`Skipping match for post ${scrapedPostId} - No email found`)
+        return null
       }
+
+      // Bonus score for having emails (though it's now a requirement)
+      matchScore += 5
 
       // Determine match quality
       let matchQuality: 'good' | 'medium' | 'bad'
@@ -119,6 +126,7 @@ export class ScrapedPostMatchingService {
           match_score: matchScore,
           match_quality: matchQuality,
           matched_at: new Date(),
+          text_content: post.text,
         },
         create: {
           user_id: userId,
@@ -126,8 +134,12 @@ export class ScrapedPostMatchingService {
           match_score: matchScore,
           match_quality: matchQuality,
           matched_at: new Date(),
+          text_content: post.text,
         },
       })
+
+      // Trigger AI Enrichment immediately
+      await this.enrichMatchWithAI(match, post.text, post.post_url || "")
 
       return {
         scrapedPostId: match.scraped_post_id,
@@ -255,6 +267,54 @@ export class ScrapedPostMatchingService {
     } catch (error) {
       console.error('Error getting match stats:', error)
       throw error
+    }
+  }
+
+  private static async enrichMatchWithAI(match: any, postText: string, postUrl: string) {
+    try {
+      // Check if job already exists to avoid duplicate work
+      const existingJob = await prisma.job.findUnique({
+        where: { scraped_post_id: match.scraped_post_id }
+      })
+      if (existingJob) return
+
+      console.log(`Triggering AI Enrichment for match ${match.id}...`)
+      const response = await fetch("http://localhost:8000/api/v1/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          raw_text: postText,
+          raw_html: "<div></div>"
+        })
+      })
+
+      if (!response.ok) {
+        console.error(`AI Service Error ${response.status}: ${await response.text()}`)
+        return
+      }
+
+      const responseData = await response.json()
+
+      if (responseData.success && responseData.data) {
+        const extractedData = responseData.data
+
+        await prisma.job.create({
+          data: {
+            scraped_post_id: match.scraped_post_id,
+            title: extractedData.job_title || null,
+            company: extractedData.company || null,
+            location: extractedData.location || "Remote",
+            salary_range: extractedData.salary_range,
+            skills: extractedData.skills || [],
+            description: postText,
+            posted_date: new Date(),
+            source_url: postUrl
+          }
+        })
+        console.log(`✅ Created Job for Match ${match.id}`)
+      }
+    } catch (e) {
+      console.error("AI Enrichment Failed:", e)
     }
   }
 }

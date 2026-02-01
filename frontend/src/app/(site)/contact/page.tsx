@@ -8,6 +8,9 @@ import { Mail, MessageSquare, Phone, MapPin, Clock } from "lucide-react"
 export const metadata: Metadata = {
   title: "Contact Us - Hireoo",
   description: "Get in touch with the Hireoo team. We're here to help you automate your job search and land your dream role.",
+  alternates: {
+    canonical: "/contact",
+  },
 }
 
 const contactMethods = [

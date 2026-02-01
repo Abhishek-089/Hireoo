@@ -38,7 +38,7 @@ export function ExtensionInstallStep({
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Install Chrome Extension</h2>
         <p className="text-gray-600">
-          Get the Hireoo Chrome extension to automatically scrape LinkedIn jobs
+          Get the Hireoo Chrome extension to automatically capture job opportunities
         </p>
       </div>
 
@@ -49,7 +49,7 @@ export function ExtensionInstallStep({
             Hireoo Chrome Extension
           </h3>
           <p className="text-gray-600 mb-6">
-            Browse LinkedIn as usual and let our extension automatically find and analyze job postings for you.
+            Browse professional networks as usual and let our extension automatically find and analyze job postings for you.
           </p>
 
           <div className="space-y-3">
@@ -63,7 +63,7 @@ export function ExtensionInstallStep({
             </div>
             <div className="flex items-center justify-center text-sm text-gray-700">
               <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-              <span>Privacy-focused scraping</span>
+              <span>Privacy-focused capture</span>
             </div>
           </div>
         </div>
