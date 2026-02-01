@@ -326,4 +326,35 @@ async function checkAuthenticationStatus(): Promise<void> {
 // Set up periodic auth check (every 30 minutes)
 chrome.alarms.create('checkAuth', { periodInMinutes: 30 })
 
+// Listen for messages from the website (external)
+// This allows the website to detect if the extension is installed
+chrome.runtime.onMessageExternal.addListener(
+  (request: any, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
+    console.log('External message received from website:', request, sender)
+
+    if (request.type === 'PING') {
+      // Respond with extension info
+      sendResponse({
+        installed: true,
+        version: chrome.runtime.getManifest().version,
+        name: chrome.runtime.getManifest().name
+      })
+      return true
+    }
+
+    if (request.type === 'START_HIDDEN_RUNNER') {
+      console.log('External request to start hidden runner:', request)
+      const runner = HiddenRunner.getInstance()
+      runner.start()
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, message: error.message }))
+      return true
+    }
+
+    // Unknown message type
+    sendResponse({ error: 'Unknown message type' })
+    return true
+  }
+)
+
 console.log('Hireoo background service worker initialized')

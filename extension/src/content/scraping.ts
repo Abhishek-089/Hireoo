@@ -333,7 +333,7 @@ export class LinkedInScraper {
   // Cached remote config (fallback to defaults)
   private config: ScraperConfig = LinkedInScraper.DEFAULT_CONFIG
   private configLoaded = false
-  private readonly CONFIG_URL = 'https://hireoo-taupe.vercel.app/api/scraper/config'
+  private readonly CONFIG_URL = 'https://hireoo.in/api/scraper/config'
 
   // Track scraped post URLs (more stable than IDs) to avoid duplicates within session
   private scrapedPostUrls = new Set<string>()
@@ -1304,6 +1304,10 @@ async function handleScrapingMessage(message: any, sender: chrome.runtime.Messag
         bodyChildren: document.body.children.length,
         mainChildren: document.querySelector('main')?.children.length || 0
       }
+
+    case 'KEEP_ALIVE':
+      // Respond to keep-alive ping from background script
+      return { success: true, alive: true }
 
     default:
       // Ignore unknown messages (e.g. LINKEDIN_PAGE_LOADED) so we don't spam errors

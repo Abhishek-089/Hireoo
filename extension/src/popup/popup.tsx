@@ -42,7 +42,7 @@ const Popup: React.FC = () => {
         if (isAuthenticated) {
           checkRunnerStatus()
         }
-      }, 5000)
+      }, 2000)
       return () => clearInterval(statusInterval)
     }
   }, [isAuthenticated])
@@ -71,6 +71,9 @@ const Popup: React.FC = () => {
         if (!message.authenticated) {
           setUser(null)
         }
+      }
+      if (message.type === 'RUNNER_STATUS_CHANGED' && message.status) {
+        setRunnerStatus(message.status)
       }
     })
   }
@@ -208,8 +211,8 @@ const Popup: React.FC = () => {
 
             <p className="text-center text-xs text-gray-500 mt-4">
               Don't have an account?{' '}
-              <a 
-                href="#" 
+              <a
+                href="#"
                 onClick={(e) => {
                   e.preventDefault()
                   chrome.tabs.create({ url: `${import.meta.env.VITE_APP_URL || 'http://localhost:3000'}/signup` })

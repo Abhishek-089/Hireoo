@@ -53,9 +53,9 @@
     {
       "matches": [
         "https://hireoo-taupe.vercel.app/*",
+        "https://hireoo.in/*",
         "https://app.hireoo.com/*",
-        "http://localhost:3000/*",
-        "https://hireoo.in/*"
+        "http://localhost:3000/*"
       ],
       "js": [
         "src/content/auth-bridge.ts"
@@ -77,8 +77,8 @@
     "matches": [
       "https://*.hireoo.in/*",
       "https://hireoo-taupe.vercel.app/*",
-      "http://localhost:3000/*",
-      "https://hireoo.in/*"
+      "https://hireoo.in/*",
+      "http://localhost:3000/*"
     ]
   }
 }

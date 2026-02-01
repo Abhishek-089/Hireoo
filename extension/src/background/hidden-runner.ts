@@ -12,6 +12,21 @@ export class HiddenRunner {
   private postsScraped = 0
   private readonly SCROLL_INTERVAL_MIN = 5000 // 5 seconds
   private readonly SCROLL_INTERVAL_MAX = 10000 // 10 seconds
+
+  // Helper to broadcast status changes
+  private async broadcastStatus() {
+    try {
+      const status = await this.getStatus()
+      chrome.runtime.sendMessage({
+        type: 'RUNNER_STATUS_CHANGED',
+        status
+      }).catch(() => {
+        // Ignore errors if no receivers (popup closed)
+      })
+    } catch (e) {
+      console.error('[HiddenRunner] Failed to broadcast status:', e)
+    }
+  }
   private readonly SCRAPE_INTERVAL = 15000 // 15 seconds - scrape even without scrolling
   private readonly MAX_RUN_TIME = 30 * 60 * 1000 // 30 minutes
   private readonly ACTIVITY_TIMEOUT = 5 * 60 * 1000 // 5 minutes
@@ -20,8 +35,9 @@ export class HiddenRunner {
   // to avoid excessive background activity. You can tune this value.
   private readonly MAX_POSTS_PER_RUN = 100
   private scrapeInterval: number | null = null
+  private keepAliveInterval: number | null = null // Keep tab active
   // Hardcoded keywords for now - will be made dynamic later
-  private readonly SEARCH_KEYWORDS = 'freelance developer project'
+  private searchKeywords = 'freelance developer project'
 
   private constructor() { }
 
@@ -31,6 +47,32 @@ export class HiddenRunner {
   private buildSearchUrl(keywords: string): string {
     const encodedKeywords = encodeURIComponent(keywords)
     return `https://www.linkedin.com/search/results/content/?keywords=${encodedKeywords}&origin=SWITCH_SEARCH_VERTICAL`
+  }
+
+  /**
+   * Fetch scraping keywords from backend API
+   */
+  private async fetchSearchKeywords(): Promise<string> {
+    try {
+      console.log('[HiddenRunner] 📥 Fetching dynamic search keywords...')
+      const response = await ExtensionAuth.authenticatedRequest('/api/extension/preferences')
+
+      if (!response.ok) {
+        console.warn('[HiddenRunner] ⚠️ Failed to fetch preferences, using default keywords')
+        return this.searchKeywords
+      }
+
+      const data = await response.json()
+      if (data.keywords && typeof data.keywords === 'string') {
+        console.log(`[HiddenRunner] ✅ Fetched keywords: "${data.keywords}"`)
+        return data.keywords
+      }
+
+      return this.searchKeywords
+    } catch (error) {
+      console.error('[HiddenRunner] ❌ Error fetching keywords:', error)
+      return this.searchKeywords
+    }
   }
 
   static getInstance(): HiddenRunner {
@@ -48,8 +90,12 @@ export class HiddenRunner {
 
     try {
       console.log('[HiddenRunner] 🚀 Starting hidden LinkedIn runner...')
+
+      // Fetch dynamic keywords
+      this.searchKeywords = await this.fetchSearchKeywords()
+
       console.log('[HiddenRunner] 📋 Configuration:', {
-        keywords: this.SEARCH_KEYWORDS,
+        keywords: this.searchKeywords,
         scrollInterval: `${this.SCROLL_INTERVAL_MIN / 1000}s - ${this.SCROLL_INTERVAL_MAX / 1000}s`,
         scrapeInterval: `${this.SCRAPE_INTERVAL / 1000}s`,
         maxRunTime: `${this.MAX_RUN_TIME / 1000 / 60} minutes`,
@@ -72,15 +118,27 @@ export class HiddenRunner {
       })
 
       // Build search URL with keywords
-      const searchUrl = this.buildSearchUrl(this.SEARCH_KEYWORDS)
+      const searchUrl = this.buildSearchUrl(this.searchKeywords)
       console.log(`[HiddenRunner] Opening search results page: ${searchUrl}`)
 
-      // Create hidden tab with search results URL
+      // Create tab - must be active to avoid throttling
+      // We'll create it in a way that doesn't interrupt the user
       const tab = await chrome.tabs.create({
         url: searchUrl,
-        active: false, // Hidden tab
+        active: true, // Must be active to avoid throttling
         pinned: false
       })
+
+      // Immediately switch back to the previous tab to minimize disruption
+      // Get all tabs and find the one that was active before
+      const allTabs = await chrome.tabs.query({ currentWindow: true })
+      const previousTab = allTabs.find(t => t.id !== tab.id && !t.pinned)
+      if (previousTab?.id) {
+        // Switch back to previous tab after a brief moment
+        setTimeout(() => {
+          chrome.tabs.update(previousTab.id!, { active: true }).catch(() => { })
+        }, 500)
+      }
 
       this.hiddenTabId = tab.id!
       this.isRunning = true
@@ -88,8 +146,11 @@ export class HiddenRunner {
       this.lastActivity = Date.now()
       this.postsScraped = 0
 
+      // Broadcast status change immediately
+      this.broadcastStatus()
+
       console.log(`[HiddenRunner] Hidden tab created with ID: ${this.hiddenTabId}`)
-      console.log(`[HiddenRunner] Scraping keywords: "${this.SEARCH_KEYWORDS}"`)
+      console.log(`[HiddenRunner] Scraping keywords: "${this.searchKeywords}"`)
 
       // Wait for page to load, then initialize
       // Increased wait time for hidden tabs which throttle cpu
@@ -153,15 +214,27 @@ export class HiddenRunner {
         this.scrapeInterval = null
       }
 
+      // Stop keep-alive
+      if (this.keepAliveInterval) {
+        clearInterval(this.keepAliveInterval)
+        this.keepAliveInterval = null
+      }
+
       // Close hidden tab
       if (this.hiddenTabId) {
-        await chrome.tabs.remove(this.hiddenTabId)
+        chrome.tabs.remove(this.hiddenTabId).catch(() => { })
         this.hiddenTabId = null
       }
 
       this.isRunning = false
+      this.scrollInterval = null
+      this.scrapeInterval = null
+      this.keepAliveInterval = null
       this.postsScraped = 0
       this.startTime = 0
+
+      // Broadcast stopped status
+      this.broadcastStatus()
 
       console.log('Hidden runner stopped successfully')
       return { success: true, message: 'Hidden runner stopped successfully' }
@@ -210,10 +283,15 @@ export class HiddenRunner {
       console.log('[HiddenRunner] 🔄 Starting periodic scraping loop...')
       this.startPeriodicScraping()
 
+      // Start keep-alive mechanism to prevent tab throttling
+      console.log('[HiddenRunner] 💓 Starting keep-alive mechanism...')
+      this.startKeepAlive()
+
       console.log('[HiddenRunner] ✅ Runner initialized successfully!')
       console.log('[HiddenRunner] 📊 All systems active:')
       console.log('  - Auto-scrolling: ACTIVE')
       console.log('  - Periodic scraping: ACTIVE')
+      console.log('  - Keep-alive: ACTIVE')
       console.log('  - Post tracking: ACTIVE')
     } catch (error) {
       console.error('[HiddenRunner] ❌ Failed to initialize:', error)
@@ -389,6 +467,41 @@ export class HiddenRunner {
     }, this.SCRAPE_INTERVAL)
 
     console.log('[HiddenRunner] ✅ Periodic scraping started')
+  }
+
+  /**
+   * Keep-alive mechanism to prevent Chrome from throttling the tab
+   * Periodically sends a message to the tab to keep it active
+   */
+  private startKeepAlive(): void {
+    if (!this.hiddenTabId || !this.isRunning) {
+      console.warn('[HiddenRunner] ⚠️ Cannot start keep-alive: not ready')
+      return
+    }
+
+    console.log('[HiddenRunner] 💓 Starting keep-alive (every 30s)...')
+
+    // Send a ping every 30 seconds to keep the tab active
+    this.keepAliveInterval = setInterval(async () => {
+      if (!this.isRunning || !this.hiddenTabId) {
+        if (this.keepAliveInterval) {
+          clearInterval(this.keepAliveInterval)
+          this.keepAliveInterval = null
+        }
+        return
+      }
+
+      try {
+        // Send a simple message to keep the tab alive
+        await chrome.tabs.sendMessage(this.hiddenTabId, {
+          type: 'KEEP_ALIVE'
+        }).catch(() => { }) // Ignore errors if content script isn't ready
+      } catch (error) {
+        // Silently ignore - tab might not be ready yet
+      }
+    }, 30000) // Every 30 seconds
+
+    console.log('[HiddenRunner] ✅ Keep-alive started')
   }
 
   private startScrolling(): void {
