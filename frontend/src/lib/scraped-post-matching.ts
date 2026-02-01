@@ -115,7 +115,7 @@ export class ScrapedPostMatchingService {
       }
 
       // Save match to database
-      const match = await prisma.scrapedPostMatch.upsert({
+      const match = await (prisma.scrapedPostMatch as any).upsert({
         where: {
           user_id_scraped_post_id: {
             user_id: userId,
