@@ -73,20 +73,19 @@ export function QuickActions({ status }: QuickActionsProps) {
     }
 
     try {
-      // Check if chrome runtime is available
-      // @ts-ignore - Chrome is available in the browser but not in frontend types
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      // Check if chrome runtime is available (only in browser extension context)
+      const chromeRuntime = typeof chrome !== 'undefined' ? chrome.runtime : undefined
+      if (chromeRuntime && chromeRuntime.sendMessage) {
         // Send message to extension
-        // @ts-ignore
-        chrome.runtime.sendMessage(EXTENSION_CONFIG.id, {
+        chromeRuntime.sendMessage(EXTENSION_CONFIG.id, {
           type: 'START_HIDDEN_RUNNER',
           source: 'DASHBOARD'
         }, (response: any) => {
-          // @ts-ignore
-          if (chrome.runtime.lastError) {
-            console.error('Failed to trigger automation:', chrome.runtime.lastError)
-            // @ts-ignore
-            alert(`Failed to connect to extension: ${chrome.runtime.lastError.message}. \n\nPlease make sure the extension is installed and reloaded.`)
+          // Check for chrome runtime errors with proper type guard
+          const lastError = typeof chrome !== 'undefined' && chrome.runtime?.lastError ? chrome.runtime.lastError : null
+          if (lastError) {
+            console.error('Failed to trigger automation:', lastError)
+            alert(`Failed to connect to extension: ${lastError.message || 'Unknown error'}. \n\nPlease make sure the extension is installed and reloaded.`)
           } else {
             console.log('Automation triggered:', response)
             if (response && response.success === false) {
