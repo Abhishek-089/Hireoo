@@ -25,8 +25,22 @@ async function main() {
     for (const job of badTitleJobs) {
         if (!job.scraped_post_id) continue
 
+        // First get the scraped post to find user_id
+        const scrapedPost = await prisma.scrapedPost.findUnique({
+            where: { id: job.scraped_post_id },
+            select: { user_id: true }
+        })
+
+        if (!scrapedPost) continue
+
+        // Use compound unique key: user_id + scraped_post_id
         const match = await prisma.scrapedPostMatch.findUnique({
-            where: { scraped_post_id: job.scraped_post_id },
+            where: { 
+                user_id_scraped_post_id: {
+                    user_id: scrapedPost.user_id,
+                    scraped_post_id: job.scraped_post_id
+                }
+            },
             include: { scrapedPost: true }
         })
 
