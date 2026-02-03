@@ -36,6 +36,7 @@ export function SettingsStep({
                         }, (response: any) => {
                             // @ts-ignore
                             if (chrome.runtime.lastError) {
+                                // @ts-ignore
                                 console.error('[Onboarding] Failed to trigger automation:', chrome.runtime.lastError)
                                 // @ts-ignore
                                 alert(`Extension connection failed: ${chrome.runtime.lastError.message}`)
