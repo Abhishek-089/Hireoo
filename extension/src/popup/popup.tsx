@@ -246,13 +246,11 @@ const Popup: React.FC = () => {
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg">H</span>
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900">Hireoo</h1>
-                <p className="text-xs text-gray-500">AI Job Assistant</p>
-              </div>
+              <img
+                src="/logo.png"
+                alt="Hireoo"
+                className="h-20 w-auto"
+              />
             </div>
             <button
               onClick={handleLogout}

@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -42,8 +43,14 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-          <Link href="/dashboard" className="flex items-center mb-1">
-            <span className="text-2xl font-bold text-gray-900">Hireoo</span>
+          <Link href="/dashboard" className="flex items-center">
+            <Image
+              src="/Hireo-logo.png"
+              alt="Hireoo"
+              width={540}
+              height={247}
+              className="h-10 w-auto"
+            />
           </Link>
           <button
             className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500"

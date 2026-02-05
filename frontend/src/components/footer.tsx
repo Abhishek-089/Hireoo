@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { Mail, Twitter, Linkedin, Github } from "lucide-react"
 
 export function Footer() {
@@ -37,13 +38,31 @@ export function Footer() {
   ]
 
   return (
-    <footer className="bg-gray-50 border-t border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <footer className="relative bg-gray-50 border-t border-gray-200 overflow-hidden">
+      {/* Large 75% visible logo in background */}
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3 w-full max-w-6xl opacity-5 pointer-events-none">
+        <Image
+          src="/Hireo-logo.png"
+          alt=""
+          width={1200}
+          height={400}
+          className="w-full h-auto"
+        />
+      </div>
+
+      {/* Main footer content with links */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-8">
           {/* Brand Column */}
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center">
-              <span className="text-2xl font-bold text-blue-600">Hireoo</span>
+              <Image
+                src="/Hireo-logo.png"
+                alt="Hireoo"
+                width={120}
+                height={40}
+                className="h-10 w-auto"
+              />
             </Link>
             <p className="mt-4 text-gray-600 text-sm leading-relaxed">
               Automate your job search with AI-powered job discovery and personalized cold emailing.
@@ -138,26 +157,16 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-8 pt-8 border-t border-gray-200">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <p className="text-sm text-gray-600">
-              © 2024 Hireoo. All rights reserved.
-            </p>
-            <div className="mt-4 md:mt-0 flex space-x-6">
-              <Link
-                href="/privacy"
-                className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Privacy
-              </Link>
-              <Link
-                href="/terms"
-                className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Terms
-              </Link>
+        {/* Bottom section with email icon and copyright */}
+        <div className="mt-12 pt-8 border-t border-white/10 text-center">
+          {/* Email icon */}
+          {/* <div className="flex justify-center mb-6">
+            <div className="bg-white/10 backdrop-blur-sm p-3 rounded-lg">
+              <Mail className="h-6 w-6 text-white" />
             </div>
-          </div>
+          </div> */}
+
+
         </div>
       </div>
     </footer>
