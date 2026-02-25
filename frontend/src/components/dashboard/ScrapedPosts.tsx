@@ -25,12 +25,43 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
   let totalCount = 0
 
   try {
+    // Get user's daily limit reset time to filter posts shown today
+    const user = await prisma.user.findUnique({
+      where: { id: (session.user as any).id },
+      select: { daily_limit_reset_at: true }
+    })
+
+    // Calculate the start of today's limit window
+    // If reset time exists and is in the future, use the previous reset (24h ago)
+    // Otherwise use the current reset time
+    const now = new Date()
+    let limitWindowStart: Date
+
+    if (user?.daily_limit_reset_at && user.daily_limit_reset_at > now) {
+      // Reset time is in the future, so we're in the current window
+      // Window started 24 hours before the next reset
+      limitWindowStart = new Date(user.daily_limit_reset_at.getTime() - 24 * 60 * 60 * 1000)
+    } else {
+      // No reset time or it's passed, use a safe default (start of today in IST)
+      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+      const nowIST = new Date(now.getTime() + IST_OFFSET_MS)
+      const year = nowIST.getUTCFullYear()
+      const month = nowIST.getUTCMonth()
+      const day = nowIST.getUTCDate()
+      const todayMidnightIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0))
+      limitWindowStart = new Date(todayMidnightIST.getTime() - IST_OFFSET_MS)
+    }
+
     const [rows, count, appliedRows] = await Promise.all([
-      // Get matched posts (Actionable matches)
+      // Get matched posts shown today (within daily limit)
       prisma.scrapedPostMatch.findMany({
         where: {
           user_id: (session.user as any).id,
           applied: false,
+          shown_to_user: true,  // Only posts that were shown
+          shown_at: {
+            gte: limitWindowStart  // Only posts shown in current limit window
+          }
         },
         include: {
           scrapedPost: {
@@ -39,20 +70,24 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
             }
           }
         },
-        orderBy: { matched_at: "desc" },
+        orderBy: { shown_at: "desc" },  // Most recently shown first
         skip: (currentPage - 1) * pageSize,
         take: pageSize,
       }),
 
-      // Count total matches
+      // Count total matches shown today
       prisma.scrapedPostMatch.count({
         where: {
           user_id: (session.user as any).id,
           applied: false,
+          shown_to_user: true,
+          shown_at: {
+            gte: limitWindowStart
+          }
         },
       }),
 
-      // Get applied matches
+      // Get applied matches (no time limit on these)
       prisma.scrapedPostMatch.findMany({
         where: {
           user_id: (session.user as any).id,

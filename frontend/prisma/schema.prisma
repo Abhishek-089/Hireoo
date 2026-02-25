@@ -294,23 +294,22 @@ model EmailReply {
 }
 
 // Scraped Post model - Raw LinkedIn posts received from extension
+// Posts are now shared across users - user association is tracked via ScrapedPostMatch
 model ScrapedPost {
   id            String   @id @default(cuid())
-  user_id       String
   raw_html      String   @db.Text
   text          String   @db.Text
   post_url      String
-  linkedin_id   String?  @unique // LinkedIn post ID
+  linkedin_id   String?  @unique // LinkedIn post ID - globally unique
   timestamp     DateTime?
   created_at    DateTime @default(now())
   processed     Boolean  @default(false)
 
-  user User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   job  Job?
   applications ScrapedApplication[]
   matches       ScrapedPostMatch[]
 
-  @@index([user_id, created_at])
+  @@index([created_at])
   @@index([linkedin_id])
   @@index([processed])
 }
@@ -335,18 +334,21 @@ model ScrapedApplication {
 }
 
 // Scraped Post Match - Tracks which scraped posts match which users
+// Also tracks which users actually scraped the post vs. just matched to it
 model ScrapedPostMatch {
   id              String    @id @default(cuid())
   user_id         String
   scraped_post_id String
-  match_score     Float     // 0-100 match score
-  match_quality   String    // 'good', 'medium', 'bad'
+  match_score     Float     @default(0)       // 0-100 match score
+  match_quality   String    @default("pending") // 'good', 'medium', 'bad', 'pending'
   matched_at      DateTime  @default(now())
   shown_to_user   Boolean   @default(false) // Whether this post was shown in dashboard
   shown_at        DateTime? // When it was first shown
-  applied          Boolean   @default(false) // Whether user applied to this post
+  applied         Boolean   @default(false) // Whether user applied to this post
   applied_at      DateTime?
   text_content    String?   @db.Text // Cached text content for enrichment
+  scraped_by_user Boolean   @default(false) // Whether this user scraped this post
+  scraped_at      DateTime? // When this user scraped this post
 
   user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
   scrapedPost ScrapedPost @relation(fields: [scraped_post_id], references: [id], onDelete: Cascade)
@@ -354,6 +356,7 @@ model ScrapedPostMatch {
   @@unique([user_id, scraped_post_id])
   @@index([user_id, matched_at])
   @@index([user_id, shown_to_user])
+  @@index([user_id, scraped_by_user])
   @@index([scraped_post_id])
   @@index([match_score])
   @@index([match_quality])
@@ -403,13 +406,17 @@ model User {
   date_posted_preference String?
   email_template_config  Json?
 
+  // Daily job scraping limits
+  daily_matched_jobs_count Int       @default(0)
+  daily_limit_reset_at     DateTime? // Next reset time in user's timezone
+  last_matched_job_at      DateTime? // Track last matched job timestamp
+
   accounts Account[]
   sessions Session[]
   resumes  Resume[]
   gmailCredential GmailCredential?
   job_matches JobMatch[]
   emails Email[]
-  scrapedPosts ScrapedPost[]
   gmailCredentials GmailCredentials?
   emailDrafts EmailDraft[]
   emailLogs EmailLog[]

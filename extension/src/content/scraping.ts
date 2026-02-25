@@ -5,6 +5,7 @@ type PostPayload = {
   post_id: string | null
   post_url: string
   raw_text: string
+  raw_html: string
   author_name: string | null
   detected_emails: string[]
   scraped_at: string
@@ -55,6 +56,7 @@ function hasHiringIntent(text: string): boolean {
 function buildPostPayload(opts: {
   post_id: string | null
   raw_text: string
+  raw_html: string
   author_name?: string | null
   source: 'network' | 'dom'
 }): PostPayload {
@@ -63,6 +65,7 @@ function buildPostPayload(opts: {
     post_id: opts.post_id,
     post_url: opts.post_id ? `https://www.linkedin.com/feed/update/${opts.post_id}` : '',
     raw_text: raw,
+    raw_html: opts.raw_html,
     author_name: opts.author_name || null,
     detected_emails: detectEmails(raw),
     scraped_at: new Date().toISOString(),
@@ -141,6 +144,7 @@ function collectFromNetworkResponse(body: string) {
       posts.push(buildPostPayload({
         post_id: id,
         raw_text,
+        raw_html: '',
         author_name: node.authorName || node.name || null,
         source: 'network',
       }))
@@ -187,9 +191,12 @@ function scrapeDomFallback(cap: number): PostPayload[] {
     const urn = el.getAttribute('data-urn')
     const raw_text = collectVisibleText(el)
     if (!raw_text || !hasHiringIntent(raw_text)) continue
+    // Use outerHTML for a more complete capture; fall back to text if HTML is empty
+    const raw_html = el.outerHTML || el.innerHTML || raw_text
     results.push(buildPostPayload({
       post_id: urn || null,
       raw_text,
+      raw_html,
       author_name: null,
       source: 'dom',
     }))
@@ -390,17 +397,22 @@ export class LinkedInScraper {
   }
 
   private getAllVisibleText(root: Element): string {
-    // Remove obvious UI noise nodes (buttons, menus) before collecting text
+    // Clone the element to avoid mutating the actual DOM
+    // (mutation causes LinkedIn's framework to re-render, making innerHTML empty)
+    const clone = root.cloneNode(true) as Element
+
+    // Remove obvious UI noise nodes (buttons, menus) from the CLONE only
     const noiseSelectors = ['button', '[role="button"]', 'nav', 'menu', '.feed-shared-control-menu']
     noiseSelectors.forEach(sel => {
-      root.querySelectorAll(sel).forEach(node => node.remove())
+      clone.querySelectorAll(sel).forEach(node => node.remove())
     })
 
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) => {
         const parent = node.parentElement
         if (!parent) return NodeFilter.FILTER_SKIP
-        if (!this.isVisible(parent)) return NodeFilter.FILTER_SKIP
+        const style = window.getComputedStyle(parent)
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) return NodeFilter.FILTER_SKIP
         const trimmed = node.textContent?.trim()
         if (!trimmed) return NodeFilter.FILTER_SKIP
         return NodeFilter.FILTER_ACCEPT
@@ -434,6 +446,12 @@ export class LinkedInScraper {
 
   // Main scraping function
   async scrapeVisiblePosts(): Promise<LinkedInPost[]> {
+    // Reset session tracking at start of each call so the backend handles deduplication.
+    // Without this, after the first scrape all visible posts are in scrapedPostUrls,
+    // causing subsequent calls to return 0 posts and fall through to the DOM fallback
+    // which produces posts without HTML.
+    this.scrapedPostUrls.clear()
+
     // Send debug info to background
     const sendDebug = (msg: string, data?: any) => {
       chrome.runtime.sendMessage({
@@ -818,9 +836,14 @@ export class LinkedInScraper {
           }
 
           // Only check for duplicates within this scrape session (same post appearing twice on page)
-          // Use postUrl as it's more stable than post.id
-          // Don't use persistent scrapedPostUrls - let the backend check against database
+          // Check for duplicates using persistent set (scraped in previous calls this session)
           const postIdentifier = post.postUrl || post.id
+          if (this.scrapedPostUrls.has(postIdentifier)) {
+            skippedDuplicate++
+            continue
+          }
+
+          // Also check locally within this call (though persistent set covers it, good for safety)
           if (sessionScrapedIds.has(postIdentifier)) {
             skippedDuplicate++
             continue
@@ -828,7 +851,6 @@ export class LinkedInScraper {
 
           posts.push(post)
           sessionScrapedIds.add(postIdentifier)
-          // Also add to persistent set for logging purposes, but don't use it for filtering
           this.scrapedPostUrls.add(postIdentifier)
 
           // Log successful scrape
@@ -1136,15 +1158,43 @@ export class LinkedInScraper {
     this.lastScrollPosition = window.scrollY
     this.scrollCount++
 
-    // If scroll didn't move much (end of page?), try scrolling to bottom of body to force trigger
-    // But be careful - if we scrolled a container, window.scrollY might not change!
-    if (Math.abs(this.lastScrollPosition - beforeScroll) < 10) {
-      console.log('[Scraper] ⚠️ Window scroll didn\'t change position, but container scroll might have worked.');
-      // Force trigger by scrolling to bottom if we really think it's stuck
-      // window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    // Check if we didn't move much, or if we've scrolled many times (likely hit bottom of search results)
+    if (Math.abs(this.lastScrollPosition - beforeScroll) < 10 || this.scrollCount % 8 === 0) {
+      console.log('[Scraper] ⚠️ Checking for Next page button...');
+
+      const nextButtonSelectors = [
+        'button[aria-label="Next"]',
+        '.artdeco-pagination__button--next',
+        '.search-results-pagination-next-btn'
+      ];
+
+      let nextButton = null;
+      for (const sel of nextButtonSelectors) {
+        nextButton = document.querySelector(sel) as HTMLButtonElement | null;
+        if (nextButton && !nextButton.disabled) break;
+      }
+
+      // Fallback: search by text
+      if (!nextButton) {
+        nextButton = Array.from(document.querySelectorAll('button')).find(
+          btn => btn.innerText.trim() === 'Next' && !btn.disabled
+        ) as HTMLButtonElement | undefined || null;
+      }
+
+      if (nextButton && !nextButton.disabled) {
+        console.log('[Scraper] ➡️ Found Next page button, clicking it!');
+        nextButton.click();
+        this.scrollCount = 0; // Reset scroll count for new page
+
+        // Wait longer for the next page to load
+        await new Promise(resolve => setTimeout(resolve, 4000));
+      } else if (Math.abs(this.lastScrollPosition - beforeScroll) < 10) {
+        console.log('[Scraper] ⚠️ Scroll didn\'t move and no Next button found. Might be end of results.');
+      }
+    } else {
+      console.log(`[Scraper] ✅ Scrolled ${scrollAmount.toFixed(0)}px to position ${this.lastScrollPosition}px`)
     }
 
-    console.log(`[Scraper] ✅ Scrolled ${scrollAmount.toFixed(0)}px to position ${this.lastScrollPosition}px`)
     return Promise.resolve()
   }
 
@@ -1163,6 +1213,12 @@ export class LinkedInScraper {
     this.scrapedPostUrls.clear()
     this.lastScrollPosition = 0
     this.scrollCount = 0
+  }
+
+  // Refresh scraper config
+  async refreshConfig(): Promise<void> {
+    this.configLoaded = false
+    await this.scrapeVisiblePosts()
   }
 }
 
@@ -1264,7 +1320,7 @@ async function handleScrapingMessage(message: any, sender: chrome.runtime.Messag
         const convertedPosts = domPosts.map(p => ({
           id: p.post_id || `post_${Date.now()}_${Math.random()}`,
           text: p.raw_text,
-          html: '',
+          html: p.raw_html || '',
           author: {
             name: p.author_name || 'Unknown',
             profileUrl: '',
@@ -1283,8 +1339,7 @@ async function handleScrapingMessage(message: any, sender: chrome.runtime.Messag
       return { posts: allPosts, count: allPosts.length }
 
     case 'REFRESH_SCRAPER_CONFIG':
-      scraper!.configLoaded = false
-      await scraper!.scrapeVisiblePosts() // this triggers ensureConfigLoaded
+      await scraper!.refreshConfig()
       return { success: true }
 
     case 'CHECK_PAGE_READY':

@@ -2,6 +2,7 @@ import { OverviewStats } from "@/components/dashboard/OverviewStats"
 import { RecentActivity } from "@/components/dashboard/RecentActivity"
 import { QuickActions } from "@/components/dashboard/QuickActions"
 import { ExtensionAutoLogin } from "@/components/extension/ExtensionAutoLogin"
+import { DailyLimitProgress } from "@/components/dashboard/DailyLimitProgress"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -18,19 +19,22 @@ async function getDashboardStats(userId: string) {
       emailStats
     ] = await Promise.all([
       // 1. Job Matches (Actionable: contains "@" and NOT applied)
-      prisma.scrapedPost.count({
+      prisma.scrapedPostMatch.count({
         where: {
           user_id: userId,
-          text: { contains: "@" },
           NOT: {
             OR: [
-              { matches: { some: { user_id: userId, applied: true } } },
-              { applications: { some: { user_id: userId } } }
+              { applied: true },
+              {
+                scrapedPost: {
+                  applications: { some: { user_id: userId } }
+                }
+              }
             ]
           }
         }
       }),
-      
+
       // 2. Emails Sent (Applications with thread ID)
       prisma.scrapedApplication.count({
         where: {
@@ -48,9 +52,9 @@ async function getDashboardStats(userId: string) {
         select: { gmail_thread_id: true }
       }).then(async (apps: { gmail_thread_id: string | null }[]) => {
         const threadIds = apps.map(a => a.gmail_thread_id).filter(Boolean) as string[]
-        
+
         if (threadIds.length === 0) return 0
-        
+
         // Count threads that have incoming messages (replies)
         const replies = await prisma.emailLog.groupBy({
           by: ['thread_id'],
@@ -61,14 +65,14 @@ async function getDashboardStats(userId: string) {
             is_reply: true,
           },
         })
-        
+
         return replies.length
       })
     ])
 
     const repliesCount = emailStats
-    const responseRate = applicationsCount > 0 
-      ? Math.round((repliesCount / applicationsCount) * 100) 
+    const responseRate = applicationsCount > 0
+      ? Math.round((repliesCount / applicationsCount) * 100)
       : 0
 
     return {
@@ -91,9 +95,9 @@ async function getDashboardStats(userId: string) {
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const session = await getServerSession(authOptions)
   const userId = (session?.user as any)?.id // Safe access with previous fix pattern
-  
-  const stats = userId 
-    ? await getDashboardStats(userId) 
+
+  const stats = userId
+    ? await getDashboardStats(userId)
     : { jobMatches: 0, emailsSent: 0, repliesReceived: 0, responseRate: 0 }
 
   const awaitedSearchParams = await searchParams
@@ -126,12 +130,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{greeting}, {session?.user?.name || "User"} 👋</h1>
           <p className="mt-2 text-gray-600">
-            {isNewUser 
-              ? "Welcome to Hireoo! Let's get started with your job search." 
+            {isNewUser
+              ? "Welcome to Hireoo! Let's get started with your job search."
               : "Here's what's happening with your job search today."}
           </p>
         </div>
 
+        <DailyLimitProgress />
         <OverviewStats stats={stats} />
         <QuickActions status={userStatus} />
         <RecentActivity />

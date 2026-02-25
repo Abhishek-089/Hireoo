@@ -21,16 +21,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get("limit") || "20", 10)
 
-    // Fetch recent scraped posts for this user
-    const posts = await prisma.scrapedPost.findMany({
+    // Fetch recent scraped posts for this user via ScrapedPostMatch
+    const matches = await prisma.scrapedPostMatch.findMany({
       where: { user_id: session.user.id },
-      orderBy: { created_at: "desc" },
+      orderBy: { matched_at: "desc" },
       take: limit,
+      include: { scrapedPost: true },
     })
 
     // Derive emails from text and filter to posts that have at least one email
-    const postsWithEmails = posts
-      .map((post: any) => {
+    const postsWithEmails = matches
+      .map((match: any) => {
+        const post = match.scrapedPost
         const emails = extractEmails(post.text || "")
         return {
           id: post.id,

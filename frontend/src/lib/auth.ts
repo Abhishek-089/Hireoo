@@ -104,6 +104,28 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.id as string
 
+        // Fetch fresh user data from database to reflect any manual changes
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: {
+              name: true,
+              email: true,
+              image: true,
+            }
+          })
+
+          if (dbUser) {
+            session.user.name = dbUser.name
+            session.user.email = dbUser.email
+            if (dbUser.image) {
+              session.user.image = dbUser.image
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching fresh user data:', error)
+        }
+
         // Include Gmail connection status in session
         if (token.gmailAccessToken) {
           try {

@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { sendTokenToExtension } from "@/lib/extension-auth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -73,6 +74,21 @@ export default function SignUpPage() {
       })
 
       if (signInResult?.ok) {
+        // Get the JWT token and send it to the extension
+        try {
+          const tokenResponse = await fetch('/api/extension/token', {
+            credentials: 'include'
+          })
+          if (tokenResponse.ok) {
+            const { token } = await tokenResponse.json()
+            if (token) {
+              sendTokenToExtension(token)
+            }
+          }
+        } catch (error) {
+          console.debug('Failed to sync with extension:', error)
+        }
+
         router.push("/dashboard?new=true")
       } else {
         router.push("/signin")
@@ -85,7 +101,8 @@ export default function SignUpPage() {
   }
 
   const handleGoogleSignUp = () => {
-    signIn("google", { callbackUrl: "/dashboard?new=true" })
+    // Add a callback parameter so we can sync with extension after OAuth
+    signIn("google", { callbackUrl: "/dashboard?new=true&syncExtension=true" })
   }
 
   return (

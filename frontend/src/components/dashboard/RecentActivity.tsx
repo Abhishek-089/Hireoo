@@ -22,40 +22,34 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
         where: { user_id: userId, gmail_thread_id: { not: null } },
         orderBy: { sent_at: 'desc' },
         take: 5,
-        include: { 
+        include: {
           scrapedPost: {
             include: { job: true }
-          } 
+          }
         }
       }),
       // 2. Recent Replies (incoming emails)
       prisma.emailLog.findMany({
-        where: { 
-          user_id: userId, 
+        where: {
+          user_id: userId,
           direction: 'received',
-          is_reply: true 
+          is_reply: true
         },
         orderBy: { sent_at: 'desc' },
         take: 5
       }),
-      // 3. New High Quality Matches
-      prisma.scrapedPost.findMany({
-        where: { 
-          user_id: userId, 
-          matches: { 
-            some: { 
-              user_id: userId, 
-              match_score: { gte: 80 }
-            } 
-          }
+      // 3. New High Quality Matches - query through ScrapedPostMatch
+      prisma.scrapedPostMatch.findMany({
+        where: {
+          user_id: userId,
+          match_score: { gte: 80 }
         },
-        orderBy: { created_at: 'desc' },
+        orderBy: { matched_at: 'desc' },
         take: 5,
-        include: { 
-          matches: {
-            where: { user_id: userId }
-          },
-          job: true
+        include: {
+          scrapedPost: {
+            include: { job: true }
+          }
         }
       })
     ])
@@ -74,10 +68,10 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
       const actions = [
         { label: "View Post", href: app.scrapedPost.post_url, primary: false }
       ]
-      
+
       if (app.gmail_thread_id) {
-        actions.unshift({ 
-          label: "Check Email", 
+        actions.unshift({
+          label: "Check Email",
           href: `https://mail.google.com/mail/u/0/#inbox/${app.gmail_thread_id}`,
           primary: true
         })
@@ -102,21 +96,22 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
         subtitle: reply.snippet || "You received a response",
         date: reply.sent_at,
         actions: [
-          { 
-            label: "View Thread", 
+          {
+            label: "View Thread",
             href: reply.thread_id ? `https://mail.google.com/mail/u/0/#inbox/${reply.thread_id}` : '#',
-            primary: true 
+            primary: true
           }
         ]
       })
     })
 
     // Map Matches
-    latestMatches.forEach((post: any) => {
-      if (post.matches[0]) {
-        let subtitle = `${post.matches[0].match_score}% Match Score`
+    latestMatches.forEach((match: any) => {
+      const post = match.scrapedPost
+      if (post) {
+        let subtitle = `${match.match_score}% Match Score`
         if (post.job?.company) {
-          subtitle = `${post.job.title || 'Job'} at ${post.job.company} • ${post.matches[0].match_score}% Match`
+          subtitle = `${post.job.title || 'Job'} at ${post.job.company} • ${match.match_score}% Match`
         }
 
         activities.push({
@@ -124,7 +119,7 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
           type: 'match_found',
           title: "High Match Found",
           subtitle: subtitle,
-          date: post.created_at,
+          date: match.matched_at,
           actions: [
             { label: "View Match", href: `/dashboard/job-matches`, primary: true }
           ]
@@ -160,27 +155,27 @@ function ActivityIcon({ type }: { type: string }) {
 function formatTimeAgo(date: Date) {
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-  
+
   if (diffInSeconds < 60) return 'Just now'
-  
+
   const diffInMinutes = Math.floor(diffInSeconds / 60)
   if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-  
+
   const diffInHours = Math.floor(diffInMinutes / 60)
   if (diffInHours < 24) return `${diffInHours}h ago`
-  
+
   const diffInDays = Math.floor(diffInHours / 24)
   if (diffInDays < 7) return `${diffInDays}d ago`
-  
+
   return date.toLocaleDateString()
 }
 
 export async function RecentActivity() {
   const session = await getServerSession(authOptions)
   const userId = (session?.user as any)?.id // Type assertion to access id
-  
+
   if (!userId) return null
-  
+
   const activities = await getRecentActivity(userId)
 
   return (
@@ -204,19 +199,18 @@ export async function RecentActivity() {
                     <span className="text-xs text-gray-500">{formatTimeAgo(activity.date)}</span>
                   </div>
                   <p className="text-sm text-gray-500 line-clamp-1">{activity.subtitle}</p>
-                  
+
                   {activity.actions.length > 0 && (
                     <div className="flex flex-wrap gap-3 mt-1">
                       {activity.actions.map((action, i) => (
-                        <Link 
-                          key={i} 
-                          href={action.href} 
+                        <Link
+                          key={i}
+                          href={action.href}
                           target={action.href.startsWith('http') ? '_blank' : undefined}
-                          className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${
-                            action.primary 
-                              ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200' 
-                              : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
-                          }`}
+                          className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${action.primary
+                            ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                            : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
+                            }`}
                         >
                           {action.label}
                         </Link>

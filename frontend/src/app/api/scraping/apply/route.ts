@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
       }),
     ])
 
+
     // Require that the user has actually uploaded a resume
     // Prefer the concrete Resume record but also honour the resume_uploaded flag
     if (!resume && !user?.resume_uploaded) {
@@ -82,10 +83,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!scrapedPost || scrapedPost.user_id !== session.user.id) {
+    if (!scrapedPost) {
       return NextResponse.json(
         { error: "Scraped post not found" },
         { status: 404 }
+      )
+    }
+
+    // Check if user has access to this post through ScrapedPostMatch
+    const userMatch = await prisma.scrapedPostMatch.findUnique({
+      where: {
+        user_id_scraped_post_id: {
+          user_id: session.user.id,
+          scraped_post_id: scrapedPostId
+        }
+      }
+    })
+
+    if (!userMatch) {
+      return NextResponse.json(
+        { error: "You don't have access to this post" },
+        { status: 403 }
       )
     }
 

@@ -21,7 +21,7 @@ export class ScrapedPostMatchingService {
       const [post, user] = await Promise.all([
         prisma.scrapedPost.findUnique({
           where: { id: scrapedPostId },
-          select: { id: true, text: true, user_id: true, post_url: true },
+          select: { id: true, text: true, post_url: true },
         }),
         prisma.user.findUnique({
           where: { id: userId },
@@ -114,8 +114,10 @@ export class ScrapedPostMatchingService {
         return null
       }
 
-      // Save match to database
-      const match = await (prisma.scrapedPostMatch as any).upsert({
+
+
+      // In the shared system, create a match record
+      const match = await prisma.scrapedPostMatch.upsert({
         where: {
           user_id_scraped_post_id: {
             user_id: userId,
@@ -125,16 +127,14 @@ export class ScrapedPostMatchingService {
         update: {
           match_score: matchScore,
           match_quality: matchQuality,
-          matched_at: new Date(),
-          text_content: post.text,
         },
         create: {
           user_id: userId,
           scraped_post_id: scrapedPostId,
           match_score: matchScore,
           match_quality: matchQuality,
-          matched_at: new Date(),
-          text_content: post.text,
+          scraped_by_user: true, // Assuming if we are matching it, they scraped it
+          scraped_at: new Date(),
         },
       })
 
@@ -164,10 +164,16 @@ export class ScrapedPostMatchingService {
     bad: number
   }> {
     try {
-      const posts = await prisma.scrapedPost.findMany({
-        where: { user_id: userId },
-        select: { id: true },
+      // Get all posts for this user through ScrapedPostMatch
+      const matches = await prisma.scrapedPostMatch.findMany({
+        where: {
+          user_id: userId,
+          scraped_by_user: true  // Only posts this user scraped
+        },
+        select: { scraped_post_id: true },
       })
+
+      const posts = matches.map(m => ({ id: m.scraped_post_id }))
 
       let matched = 0
       let good = 0
@@ -235,8 +241,8 @@ export class ScrapedPostMatchingService {
   }> {
     try {
       const [totalScraped, matches] = await Promise.all([
-        prisma.scrapedPost.count({
-          where: { user_id: userId },
+        prisma.scrapedPostMatch.count({
+          where: { user_id: userId, scraped_by_user: true },
         }),
         prisma.scrapedPostMatch.findMany({
           where: { user_id: userId },

@@ -20,52 +20,32 @@ async function getJobMatchStats(userId: string) {
       avgMatchScoreResult,
       emailStats
     ] = await Promise.all([
-      // 1. Total Matches (Actionable: contains "@" and NOT applied)
-      prisma.scrapedPost.count({
+      // 1. Total Matches (from ScrapedPostMatch table, not applied)
+      prisma.scrapedPostMatch.count({
         where: {
           user_id: userId,
-          text: { contains: "@" },
           NOT: {
             OR: [
+              { applied: true },
               {
-                matches: {
-                  some: {
-                    user_id: userId,
-                    applied: true
-                  }
-                }
-              },
-              {
-                applications: {
-                  some: {
-                    user_id: userId
-                  }
+                scrapedPost: {
+                  applications: { some: { user_id: userId } }
                 }
               }
             ]
           }
         }
       }),
-      
-      // 2. Applied Count
-      prisma.scrapedPost.count({
+
+      // 2. Applied Count - count through ScrapedPostMatch
+      prisma.scrapedPostMatch.count({
         where: {
           user_id: userId,
-          // Count as applied if there's a match marked as applied OR an application record
           OR: [
+            { applied: true },  // Marked as applied in match
             {
-              matches: {
-                some: {
-                  user_id: userId,
-                  applied: true
-                }
-              }
-            },
-            {
-              applications: {
-                some: {
-                  user_id: userId
-                }
+              scrapedPost: {
+                applications: { some: { user_id: userId } }  // Has application record
               }
             }
           ]
@@ -81,7 +61,7 @@ async function getJobMatchStats(userId: string) {
           match_score: true
         }
       }),
-      
+
       // 4. Response Rate stats (Applications vs Replies)
       Promise.all([
         // Count total applications sent via email
@@ -102,9 +82,9 @@ async function getJobMatchStats(userId: string) {
           }
         }).then(async (apps: { gmail_thread_id: string | null }[]) => {
           const threadIds = apps.map(a => a.gmail_thread_id).filter(Boolean) as string[]
-          
+
           if (threadIds.length === 0) return 0
-          
+
           // Count threads that have incoming messages (replies)
           // We check EmailLog for 'received' messages in these threads
           const replies = await prisma.emailLog.groupBy({
@@ -116,19 +96,19 @@ async function getJobMatchStats(userId: string) {
               is_reply: true,
             },
           })
-          
+
           return replies.length
         })
       ])
     ])
-    
+
     const [applicationsSent, repliesReceived] = emailStats
-    const responseRate = applicationsSent > 0 
-      ? Math.round((repliesReceived / applicationsSent) * 100) 
+    const responseRate = applicationsSent > 0
+      ? Math.round((repliesReceived / applicationsSent) * 100)
       : 0
-      
+
     // If preference is 0-1.0 scale:
-    const normalizedMatchScore = avgMatchScoreResult._avg.match_score 
+    const normalizedMatchScore = avgMatchScoreResult._avg.match_score
       ? (avgMatchScoreResult._avg.match_score / 100).toFixed(1)
       : "0.0"
 
@@ -151,10 +131,10 @@ async function getJobMatchStats(userId: string) {
 
 export default async function JobMatchesPage({ searchParams }: JobMatchesPageProps) {
   const session = await getServerSession(authOptions)
-  
+
   const userId = (session?.user as any)?.id
-  const stats = userId 
-    ? await getJobMatchStats(userId) 
+  const stats = userId
+    ? await getJobMatchStats(userId)
     : { totalMatches: 0, totalApplied: 0, responseRate: 0, avgMatchScore: "0.0" }
 
   const awaitedSearchParams = await searchParams

@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       webExtension({
-        manifest: 'public/manifest.json',
+        manifest: 'manifest.json',
         transformManifest: (manifest) => {
           const permissionPattern = `${appUrl}/*`
 

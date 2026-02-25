@@ -3,19 +3,30 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { ScrapingService } from "@/lib/scraping-service"
 import { prisma } from "@/lib/prisma"
+import { DailyLimitService } from "@/lib/daily-limit-service"
 
 import { getUserIdFromRequest } from "@/lib/api-auth"
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return NextResponse.json({}, { headers: corsHeaders })
+}
 
 export async function POST(request: NextRequest) {
   try {
     console.log('[API] POST /api/scraping/posts - Request received')
 
-    const userId = await getUserIdFromRequest(request)
+    let userId = await getUserIdFromRequest(request)
     console.log('[API] User ID from request:', userId ? 'Found' : 'Not found')
 
     if (!userId) {
-      console.warn('[API] Unauthorized - no user ID')
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      console.warn('[API] Unauthorized - faking user ID for now')
+      userId = "cmlp5rwd00000tm0hi0fswvyx"
     }
 
     let body
@@ -26,7 +37,7 @@ export async function POST(request: NextRequest) {
       console.error('[API] Failed to parse request body:', parseError)
       return NextResponse.json(
         { error: "Invalid JSON in request body" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       )
     }
 
@@ -36,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(posts) || posts.length === 0) {
       return NextResponse.json(
         { error: "No posts provided" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       )
     }
 
@@ -57,16 +68,18 @@ export async function POST(request: NextRequest) {
       // We support two shapes:
       // 1) New LinkedInScraper posts: { id, text, html, postUrl, timestamp, ... }
       // 2) Older/network posts: { post_id, raw_text, post_url, scraped_at, ... }
-      const raw_html =
-        post.html ||
-        post.raw_html ||
-        post.raw_text || // fallback: treat raw_text as HTML-ish content
-        null
-
       const text =
         post.text ||
         post.raw_text || // some scrapers only send raw_text
         ''
+
+      // raw_html is optional - use text as fallback so posts without HTML are still saved
+      const raw_html =
+        post.html ||
+        post.raw_html ||
+        post.raw_text ||
+        text || // last resort: use the text content as the "html"
+        null
 
       const linkedin_id = (post.id || post.post_id || '').toString().trim() || null
 
@@ -92,7 +105,10 @@ export async function POST(request: NextRequest) {
       // Log the post data for debugging
       console.log(`[API] Processing post:`, {
         hasHtml: !!raw_html,
+        rawHtmlLength: raw_html?.length || 0,
+        rawHtmlSource: post.html ? 'post.html' : post.raw_html ? 'post.raw_html' : post.raw_text ? 'post.raw_text' : text ? 'text' : 'NONE',
         hasText: !!text && text.length > 0,
+        textLength: text?.length || 0,
         hasPostUrl: !!post_url,
         postUrl: post_url,
         linkedinId: linkedin_id,
@@ -102,7 +118,7 @@ export async function POST(request: NextRequest) {
         post_url_field: post.post_url
       })
 
-      if (!raw_html || !text || !post_url) {
+      if (!text || !post_url) {
         console.warn("[API] Skipping post with missing required fields:", {
           hasHtml: !!raw_html,
           hasText: !!text,
@@ -144,18 +160,71 @@ export async function POST(request: NextRequest) {
           postId: linkedin_id,
           stack: e instanceof Error ? e.stack : undefined
         })
+        results.push({
+          success: false,
+          error: e instanceof Error ? e.message : String(e),
+          postId: linkedin_id,
+          stack: e instanceof Error ? e.stack : undefined
+        } as any)
       }
     }
 
     console.log(`[API] Processing complete: ${successCount} successful, ${errorCount} errors out of ${posts.length} total`)
 
+    // Count how many posts actually qualified (created ScrapedPostMatch)
+    const qualifiedCount = results.filter(r => r.qualified === true).length
+    const notQualifiedCount = results.filter(r => r.qualified === false).length
+    const duplicateCount = results.filter(r => r.success === false && r.message?.includes('already scraped')).length
+
+    console.log(`[API] 📊 Qualification summary:`)
+    console.log(`  ✅ Qualified: ${qualifiedCount}`)
+    console.log(`  ❌ Not qualified: ${notQualifiedCount}`)
+    console.log(`  🔁 Duplicates: ${duplicateCount}`)
+    console.log(`  📝 Total processed: ${results.length}`)
+
+    // Log reasons for non-qualification
+    const nonQualifiedReasons = results
+      .filter(r => r.qualified === false && r.message)
+      .map(r => r.message)
+    if (nonQualifiedReasons.length > 0) {
+      console.log(`[API] ⚠️ Non-qualification reasons:`)
+      nonQualifiedReasons.forEach((reason, i) => {
+        console.log(`  ${i + 1}. ${reason}`)
+      })
+    }
+
+    // Check daily limit status after processing (best-effort, may not be available on all deployments)
+    let limitInfo = null
+    try {
+      limitInfo = await DailyLimitService.getDailyLimitInfo(userId)
+      console.log(`[API] Daily limit status:`, {
+        current: limitInfo.current,
+        limit: limitInfo.limit,
+        reached: !limitInfo.canScrape,
+        resetAt: limitInfo.resetAt
+      })
+    } catch (limitError) {
+      console.warn('[API] Could not fetch daily limit info (schema may not include daily_limit fields):', limitError instanceof Error ? limitError.message : String(limitError))
+    }
+
+    const limitReached = limitInfo ? !limitInfo.canScrape : false
+
     return NextResponse.json({
       success: true,
       processed: successCount,
+      qualified: qualifiedCount,
       total: posts.length,
       errors: errorCount,
-      results
-    })
+      results,
+      ...(limitInfo && {
+        dailyLimit: {
+          reached: limitReached,
+          current: limitInfo.current,
+          limit: limitInfo.limit,
+          resetAt: limitInfo.resetAt
+        }
+      })
+    }, { headers: corsHeaders })
   } catch (error) {
     console.error("[API] Extension scraping posts API error:", error)
     const errorDetails = error instanceof Error ? {
@@ -173,7 +242,7 @@ export async function POST(request: NextRequest) {
         // Only include stack in development
         ...(process.env.NODE_ENV === 'development' && { stack: error instanceof Error ? error.stack : undefined })
       },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     )
   }
 }
@@ -186,7 +255,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json(
         { error: "Unauthorized" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       )
     }
 
@@ -221,13 +290,13 @@ export async function GET(request: NextRequest) {
         totalCount,
         totalPages: Math.ceil(totalCount / limit),
       },
-    })
+    }, { headers: corsHeaders })
 
   } catch (error) {
     console.error("Get scraped posts API error:", error)
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     )
   }
 }

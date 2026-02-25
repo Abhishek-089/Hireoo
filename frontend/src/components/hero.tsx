@@ -52,11 +52,7 @@ export function Hero() {
                 Install Extension
               </Button>
             </Link>
-            <Link href="/how-it-works">
-              <Button variant="ghost" size="lg" className="px-8 py-3 text-lg w-full sm:w-auto">
-                Watch Demo
-              </Button>
-            </Link>
+
           </div>
 
           {/* Trust indicators */}

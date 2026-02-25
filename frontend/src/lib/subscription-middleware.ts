@@ -57,7 +57,7 @@ export class SubscriptionMiddleware {
 
       // Paid plans have full access
       if (subscription.status === 'active' &&
-          ['pro_monthly', 'pro_yearly'].includes(subscription.plan_name)) {
+        ['pro_monthly', 'pro_yearly'].includes(subscription.plan_name)) {
         return { hasAccess: true }
       }
 
@@ -184,6 +184,7 @@ export class SubscriptionMiddleware {
               aiEmailGeneration: false,
               advancedAnalytics: false,
               prioritySupport: false,
+              dailyJobLimit: 10, // Free tier: 10 matched jobs/day
             },
             usage: {
               currentJobMatches: usageLimits.limits.currentJobMatches,
@@ -204,6 +205,7 @@ export class SubscriptionMiddleware {
               aiEmailGeneration: true,
               advancedAnalytics: true,
               prioritySupport: true,
+              dailyJobLimit: 25, // Premium Basic: 25 matched jobs/day
             },
             upgradeRequired: false,
           }
@@ -220,6 +222,7 @@ export class SubscriptionMiddleware {
               aiEmailGeneration: true,
               advancedAnalytics: true,
               prioritySupport: true,
+              dailyJobLimit: 50, // Premium Pro: 50 matched jobs/day
             },
             upgradeRequired: false,
           }
@@ -236,6 +239,7 @@ export class SubscriptionMiddleware {
               aiEmailGeneration: false,
               advancedAnalytics: false,
               prioritySupport: false,
+              dailyJobLimit: 10, // Free tier: 10 matched jobs/day
             },
             upgradeRequired: false,
           }

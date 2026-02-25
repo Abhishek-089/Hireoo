@@ -6,19 +6,19 @@ import Link from "next/link"
 
 const plans = [
   {
-    name: "Starter",
-    price: "$0",
+    name: "Free",
+    price: "₹0",
     period: "forever",
     description: "Perfect for trying out our platform",
     features: [
-      "Up to 50 job applications/month",
+      "10 matched jobs per day",
       "Chrome extension access",
       "Basic AI matching",
       "Email templates",
       "Community support"
     ],
     limitations: [
-      "Limited to 5 companies/day",
+      "Limited to 10 jobs/day",
       "Basic analytics only"
     ],
     cta: "Get Started Free",
@@ -26,12 +26,12 @@ const plans = [
     popular: false
   },
   {
-    name: "Professional",
-    price: "$29",
+    name: "Premium Basic",
+    price: "₹149",
     period: "per month",
     description: "For serious job seekers",
     features: [
-      "Unlimited job applications",
+      "25 matched jobs per day",
       "Advanced AI matching",
       "Custom email sequences",
       "Priority support",
@@ -40,27 +40,27 @@ const plans = [
       "Interview tracking"
     ],
     limitations: [],
-    cta: "Start Professional",
-    ctaLink: "/signup?plan=professional",
+    cta: "Start Premium Basic",
+    ctaLink: "/signup?plan=premium_basic",
     popular: true
   },
   {
-    name: "Enterprise",
-    price: "$99",
+    name: "Premium Pro",
+    price: "₹249",
     period: "per month",
-    description: "For teams and agencies",
+    description: "For power users",
     features: [
-      "Everything in Professional",
+      "50 matched jobs per day",
+      "Everything in Premium Basic",
+      "Unlimited job applications",
       "Team collaboration tools",
-      "White-label options",
       "API access",
       "Dedicated support",
-      "Custom integrations",
-      "Advanced reporting"
+      "Custom integrations"
     ],
     limitations: [],
-    cta: "Contact Sales",
-    ctaLink: "/contact",
+    cta: "Start Premium Pro",
+    ctaLink: "/signup?plan=premium_pro",
     popular: false
   }
 ]
@@ -82,11 +82,10 @@ export function PricingTable() {
           {plans.map((plan, index) => (
             <Card
               key={plan.name}
-              className={`relative flex flex-col ${
-                plan.popular
+              className={`relative flex flex-col ${plan.popular
                   ? "border-blue-600 shadow-xl scale-105"
                   : "border-gray-200"
-              }`}
+                }`}
             >
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
@@ -132,11 +131,10 @@ export function PricingTable() {
                 <div className="mt-8">
                   <Link href={plan.ctaLink}>
                     <Button
-                      className={`w-full ${
-                        plan.popular
+                      className={`w-full ${plan.popular
                           ? "bg-blue-600 hover:bg-blue-700"
                           : "bg-gray-900 hover:bg-gray-800"
-                      }`}
+                        }`}
                       size="lg"
                     >
                       {plan.cta}

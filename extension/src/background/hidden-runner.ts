@@ -9,7 +9,8 @@ export class HiddenRunner {
   private scrollInterval: number | null = null
   private lastActivity = 0
   private startTime = 0
-  private postsScraped = 0
+  private qualifiedPosts = 0  // Count of posts that qualified (have email + match preferences)
+  private totalPostsScraped = 0  // Total posts scraped (for safety limit)
   private readonly SCROLL_INTERVAL_MIN = 5000 // 5 seconds
   private readonly SCROLL_INTERVAL_MAX = 10000 // 10 seconds
 
@@ -28,12 +29,13 @@ export class HiddenRunner {
     }
   }
   private readonly SCRAPE_INTERVAL = 15000 // 15 seconds - scrape even without scrolling
-  private readonly MAX_RUN_TIME = 30 * 60 * 1000 // 30 minutes
+  private readonly MAX_RUN_TIME = 120 * 60 * 1000 // 120 minutes
   private readonly ACTIVITY_TIMEOUT = 5 * 60 * 1000 // 5 minutes
   private readonly PAGE_LOAD_WAIT = 8000 // 8 seconds - wait for LinkedIn to fully load
-  // Hard cap on how many posts can be scraped in a single run
-  // to avoid excessive background activity. You can tune this value.
-  private readonly MAX_POSTS_PER_RUN = 100
+  // Target number of qualified posts before stopping
+  private readonly TARGET_QUALIFIED_POSTS = 10
+  // Safety limit: max posts to scrape if we can't find enough qualified posts
+  private readonly MAX_SCRAPE_ATTEMPTS = 2000
   private scrapeInterval: number | null = null
   private keepAliveInterval: number | null = null // Keep tab active
   // Hardcoded keywords for now - will be made dynamic later
@@ -99,7 +101,8 @@ export class HiddenRunner {
         scrollInterval: `${this.SCROLL_INTERVAL_MIN / 1000}s - ${this.SCROLL_INTERVAL_MAX / 1000}s`,
         scrapeInterval: `${this.SCRAPE_INTERVAL / 1000}s`,
         maxRunTime: `${this.MAX_RUN_TIME / 1000 / 60} minutes`,
-        maxPosts: this.MAX_POSTS_PER_RUN
+        targetQualifiedPosts: this.TARGET_QUALIFIED_POSTS,
+        maxScrapeAttempts: this.MAX_SCRAPE_ATTEMPTS
       })
 
       // Check if user is authenticated (directly use ExtensionAuth instead of message)
@@ -116,6 +119,37 @@ export class HiddenRunner {
         id: authData.id,
         name: authData.name || 'N/A'
       })
+
+      // Check daily limit before starting
+      console.log('[HiddenRunner] 📊 Checking daily limit status...')
+      try {
+        const limitResponse = await ExtensionAuth.authenticatedRequest('/api/scraping/daily-limit')
+        if (limitResponse.ok) {
+          const limitData = await limitResponse.json()
+          if (limitData.data && !limitData.data.canScrape) {
+            console.log('[HiddenRunner] 🛑 Daily limit already reached!')
+            console.log('[HiddenRunner] 📊 Limit status:', limitData.data)
+
+            // Show notification
+            try {
+              await chrome.notifications.create({
+                type: 'basic',
+                iconUrl: '/icon.png',
+                title: 'Daily Limit Already Reached',
+                message: `You've already reached your daily limit of ${limitData.data.limit} matched jobs. Resets at ${new Date(limitData.data.resetAt).toLocaleTimeString()}.`,
+                priority: 2
+              })
+            } catch (notifError) {
+              console.warn('[HiddenRunner] Failed to show notification:', notifError)
+            }
+
+            return { success: false, message: `Daily limit already reached (${limitData.data.current}/${limitData.data.limit}). Resets at ${new Date(limitData.data.resetAt).toLocaleTimeString()}.` }
+          }
+          console.log('[HiddenRunner] ✅ Daily limit OK:', `${limitData.data.current}/${limitData.data.limit}`)
+        }
+      } catch (limitError) {
+        console.warn('[HiddenRunner] ⚠️ Failed to check daily limit, continuing anyway:', limitError)
+      }
 
       // Build search URL with keywords
       const searchUrl = this.buildSearchUrl(this.searchKeywords)
@@ -144,7 +178,8 @@ export class HiddenRunner {
       this.isRunning = true
       this.startTime = Date.now()
       this.lastActivity = Date.now()
-      this.postsScraped = 0
+      this.qualifiedPosts = 0
+      this.totalPostsScraped = 0
 
       // Broadcast status change immediately
       this.broadcastStatus()
@@ -223,14 +258,19 @@ export class HiddenRunner {
       // Close hidden tab
       if (this.hiddenTabId) {
         chrome.tabs.remove(this.hiddenTabId).catch(() => { })
-        this.hiddenTabId = null
       }
 
       this.isRunning = false
+
+      // Delay to ensure any pending performScrape checks this.isRunning before continuing
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      this.hiddenTabId = null
       this.scrollInterval = null
       this.scrapeInterval = null
       this.keepAliveInterval = null
-      this.postsScraped = 0
+      this.qualifiedPosts = 0
+      this.totalPostsScraped = 0
       this.startTime = 0
 
       // Broadcast stopped status
@@ -342,12 +382,13 @@ export class HiddenRunner {
         }
       } catch (err) {
         error = err
-        console.warn('[HiddenRunner] ⚠️ Content script not ready, injecting manually...', err)
 
-        if (!this.hiddenTabId) {
-          console.error('[HiddenRunner] ❌ Cannot inject script: tab ID is missing');
+        if (!this.isRunning || !this.hiddenTabId) {
+          console.log('[HiddenRunner] 🛑 Aborting scrape fallback because runner is stopped.');
           return;
         }
+
+        console.warn('[HiddenRunner] ⚠️ Content script not ready, injecting manually...', err)
 
         try {
           // --- DIRECT DEBUG INJECTION ---
@@ -600,12 +641,27 @@ export class HiddenRunner {
     try {
       console.log(`[HiddenRunner] 📦 Processing ${posts.length} scraped posts...`)
 
+      // Normalize post format before sending to backend.
+      // The production API checks post.html || post.raw_html || post.raw_text || null.
+      // Explicitly setting snake_case aliases guarantees validation passes even if the
+      // camelCase field (post.html) is somehow stripped by a CDN or proxy layer.
+      const normalizedPosts = posts.map((post: any) => ({
+        ...post,
+        raw_html: post.html || post.text || '',   // production: post.raw_html fallback
+        raw_text: post.text || '',                // production: post.raw_text fallback
+        post_url: post.postUrl || '',             // production: post.post_url fallback
+        post_id: post.id || '',                   // production: post.post_id fallback
+      }))
+
       // Log all posts being sent
-      posts.forEach((post, index) => {
-        console.log(`[Background] Post ${index + 1}/${posts.length}:`, {
+      normalizedPosts.forEach((post: any, index: number) => {
+        console.log(`[Background] Post ${index + 1}/${normalizedPosts.length}:`, {
           id: post.id,
           author: post.author?.name || 'Unknown',
-          textPreview: post.text?.substring(0, 150) || 'No text',
+          textPreview: post.text?.substring(0, 50) || 'No text',
+          htmlPreview: post.html ? 'YES' : 'NO',
+          htmlLength: post.html?.length || 0,
+          raw_html_length: post.raw_html?.length || 0,
           postUrl: post.postUrl || 'No URL',
           hasHiringKeywords: post.hasHiringKeywords,
           engagement: post.engagement
@@ -618,7 +674,7 @@ export class HiddenRunner {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ posts }),
+        body: JSON.stringify({ posts: normalizedPosts }),
       }).catch(err => {
         console.error('[Background] API request failed:', err)
         return null
@@ -632,23 +688,98 @@ export class HiddenRunner {
       if (response.ok) {
         const data = await response.json().catch(() => ({}))
         const successfulPosts = data.processed || 0
+        const qualifiedPosts = data.qualified || 0
         const duplicatePosts = posts.length - successfulPosts
 
-        this.postsScraped += successfulPosts
+        this.totalPostsScraped += posts.length
+        this.qualifiedPosts += qualifiedPosts
+
         console.log(`[HiddenRunner] ✅ Successfully sent ${posts.length} posts to backend`)
         console.log(`[HiddenRunner] 📊 Backend response:`)
         console.log(`  - New posts saved: ${successfulPosts}`)
+        console.log(`  - Qualified posts: ${qualifiedPosts}`)
         console.log(`  - Duplicate posts: ${duplicatePosts}`)
-        console.log(`  - Total posts scraped this run: ${this.postsScraped}`)
+        console.log(`  - Total scraped this run: ${this.totalPostsScraped}`)
+        console.log(`  - Qualified posts this run: ${this.qualifiedPosts}/${this.TARGET_QUALIFIED_POSTS}`)
         console.log(`[HiddenRunner] 📋 Full API response:`, data)
 
-        // Reset scraper session after successful send to allow new posts in next scrape
-        this.clearScrapedUrls()
+        // Check if daily limit was reached
+        if (data.dailyLimit?.reached) {
+          console.log('[HiddenRunner] 🛑 Daily limit reached!')
+          console.log(`[HiddenRunner] 📊 Limit status:`, {
+            current: data.dailyLimit.current,
+            limit: data.dailyLimit.limit,
+            resetAt: data.dailyLimit.resetAt
+          })
 
-        // If we've hit our per-run cap, stop the runner
-        if (this.postsScraped >= this.MAX_POSTS_PER_RUN && this.isRunning) {
-          console.log(`[Background] Reached MAX_POSTS_PER_RUN (${this.MAX_POSTS_PER_RUN}), stopping runner`)
+          // Show notification to user
+          try {
+            await chrome.notifications.create({
+              type: 'basic',
+              iconUrl: '/icon.png',
+              title: 'Daily Job Limit Reached',
+              message: `You've reached your daily limit of ${data.dailyLimit.limit} matched jobs. Resets at ${new Date(data.dailyLimit.resetAt).toLocaleTimeString()}.`,
+              priority: 2
+            })
+          } catch (notifError) {
+            console.warn('[HiddenRunner] Failed to show notification:', notifError)
+          }
+
+          // Broadcast limit reached event
+          chrome.runtime.sendMessage({
+            type: 'DAILY_LIMIT_REACHED',
+            data: data.dailyLimit
+          }).catch(() => { })
+
+          // Stop the campaign
+          console.log('[HiddenRunner] Stopping campaign due to daily limit')
           await this.stop()
+          return
+        }
+
+        // Removed: this.clearScrapedUrls() - Keep session tracking alive to prevent loops
+
+        // Check if we've reached our target of qualified posts
+        if (this.qualifiedPosts >= this.TARGET_QUALIFIED_POSTS && this.isRunning) {
+          console.log(`[HiddenRunner] 🎯 Target reached! Found ${this.qualifiedPosts} qualified posts`)
+
+          // Show success notification
+          try {
+            await chrome.notifications.create({
+              type: 'basic',
+              iconUrl: '/icon.png',
+              title: 'Job Scraping Complete!',
+              message: `Successfully found ${this.qualifiedPosts} qualified job posts matching your preferences.`,
+              priority: 2
+            })
+          } catch (notifError) {
+            console.warn('[HiddenRunner] Failed to show notification:', notifError)
+          }
+
+          await this.stop()
+          return
+        }
+
+        // Safety check: if we've scraped too many posts without reaching target
+        if (this.totalPostsScraped >= this.MAX_SCRAPE_ATTEMPTS && this.isRunning) {
+          console.log(`[HiddenRunner] ⚠️ Reached max scrape attempts (${this.MAX_SCRAPE_ATTEMPTS})`)
+          console.log(`[HiddenRunner] Found ${this.qualifiedPosts} qualified posts out of ${this.totalPostsScraped} scraped`)
+
+          // Show notification
+          try {
+            await chrome.notifications.create({
+              type: 'basic',
+              iconUrl: '/icon.png',
+              title: 'Scraping Stopped',
+              message: `Found ${this.qualifiedPosts} qualified posts after scraping ${this.totalPostsScraped} posts. Try adjusting your preferences for better matches.`,
+              priority: 2
+            })
+          } catch (notifError) {
+            console.warn('[HiddenRunner] Failed to show notification:', notifError)
+          }
+
+          await this.stop()
+          return
         }
       } else {
         const errorText = await response.text().catch(() => '')
@@ -675,7 +806,9 @@ export class HiddenRunner {
     return {
       isRunning: this.isRunning,
       hiddenTabId: this.hiddenTabId,
-      postsScraped: this.postsScraped,
+      qualifiedPosts: this.qualifiedPosts,
+      targetPosts: this.TARGET_QUALIFIED_POSTS,
+      totalPostsScraped: this.totalPostsScraped,
       lastActivity: this.lastActivity,
       uptime: this.isRunning && this.startTime > 0 ? Date.now() - this.startTime : 0,
       runTime: this.isRunning && this.startTime > 0 ? Date.now() - this.startTime : 0
