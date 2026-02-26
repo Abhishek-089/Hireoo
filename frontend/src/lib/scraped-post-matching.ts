@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { DailyLimitService } from './daily-limit-service'
 
 export interface ScrapedPostMatchResult {
   scrapedPostId: string
@@ -90,13 +91,18 @@ export class ScrapedPostMatchingService {
       const { extractEmails } = await import('./utils')
       const emails = extractEmails(postText)
 
-      // CRITICAL: Only match if an email is present
+      // HARD FILTER 1: post must contain at least one email address
       if (emails.length === 0) {
-        console.log(`Skipping match for post ${scrapedPostId} - No email found`)
+        console.log(`[Matching] Skipping post ${scrapedPostId} — no email found`)
+        // Make sure it stays hidden if it somehow got shown_to_user: true
+        await prisma.scrapedPostMatch.updateMany({
+          where: { user_id: userId, scraped_post_id: scrapedPostId },
+          data: { shown_to_user: false, shown_at: null },
+        })
         return null
       }
 
-      // Bonus score for having emails (though it's now a requirement)
+      // Small bonus for having a contactable email
       matchScore += 5
 
       // Determine match quality
@@ -109,14 +115,31 @@ export class ScrapedPostMatchingService {
         matchQuality = 'bad'
       }
 
-      // Only create match if score is above threshold (e.g., 20)
+      // HARD FILTER 2: post must score above the minimum threshold
       if (matchScore < 20) {
+        console.log(`[Matching] Skipping post ${scrapedPostId} — score ${matchScore} below threshold`)
+        await prisma.scrapedPostMatch.updateMany({
+          where: { user_id: userId, scraped_post_id: scrapedPostId },
+          data: { shown_to_user: false, shown_at: null },
+        })
         return null
       }
 
+      // HARD FILTER 3: user must not have hit their daily limit
+      const limitCheck = await DailyLimitService.checkDailyLimit(userId)
+      if (!limitCheck.canScrape) {
+        console.log(`[Matching] Skipping post ${scrapedPostId} — daily limit reached for user ${userId}: ${limitCheck.reason}`)
+        await prisma.scrapedPostMatch.updateMany({
+          where: { user_id: userId, scraped_post_id: scrapedPostId },
+          data: { shown_to_user: false, shown_at: null },
+        })
+        return null
+      }
 
+      // Post passed all filters — mark it as visible
+      const now = new Date()
+      const dailyLimit = await DailyLimitService.getDailyJobLimit(userId)
 
-      // In the shared system, create a match record
       const match = await prisma.scrapedPostMatch.upsert({
         where: {
           user_id_scraped_post_id: {
@@ -127,16 +150,52 @@ export class ScrapedPostMatchingService {
         update: {
           match_score: matchScore,
           match_quality: matchQuality,
+          shown_to_user: true,
+          shown_at: now,
         },
         create: {
           user_id: userId,
           scraped_post_id: scrapedPostId,
           match_score: matchScore,
           match_quality: matchQuality,
-          scraped_by_user: true, // Assuming if we are matching it, they scraped it
-          scraped_at: new Date(),
+          scraped_by_user: true,
+          scraped_at: now,
+          shown_to_user: true,
+          shown_at: now,
         },
       })
+
+      // Post-write verification: recount immediately after the upsert.
+      // If two concurrent batches both passed checkDailyLimit at the same time
+      // (race condition), the second one will see count > limit here and undo itself.
+      const userForWindow = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { daily_limit_reset_at: true }
+      })
+      const windowStart = DailyLimitService.getDailyWindowStart(
+        (userForWindow as any)?.daily_limit_reset_at ?? null
+      )
+      const countAfterWrite = await prisma.scrapedPostMatch.count({
+        where: {
+          user_id: userId,
+          shown_to_user: true,
+          shown_at: { gte: windowStart },
+          scrapedPost: { text: { contains: '@' } }
+        }
+      })
+
+      if (countAfterWrite > dailyLimit) {
+        // We're over the limit — undo this post (it was the one that tipped us over)
+        await prisma.scrapedPostMatch.update({
+          where: { id: match.id },
+          data: { shown_to_user: false, shown_at: null }
+        })
+        console.log(`[Matching] Post ${scrapedPostId} undone — count ${countAfterWrite} exceeded limit ${dailyLimit}`)
+        return null
+      }
+
+      // Increment the DB counter to keep it in sync
+      await DailyLimitService.incrementDailyCount(userId)
 
       // Trigger AI Enrichment immediately
       await this.enrichMatchWithAI(match, post.text, post.post_url || "")

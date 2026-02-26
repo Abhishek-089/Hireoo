@@ -7,6 +7,7 @@ import { Briefcase, Plus, Filter } from "lucide-react"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { DailyLimitService } from "@/lib/daily-limit-service"
 
 type JobMatchesPageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -14,52 +15,55 @@ type JobMatchesPageProps = {
 
 async function getJobMatchStats(userId: string) {
   try {
+    // Get the start of today's daily window — same logic as ScrapedPosts so stats match the list
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { daily_limit_reset_at: true }
+    })
+    const windowStart = DailyLimitService.getDailyWindowStart(
+      (user as any)?.daily_limit_reset_at ?? null
+    )
+
+    const todayShownFilter = {
+      user_id: userId,
+      shown_to_user: true,
+      shown_at: { gte: windowStart },
+      scrapedPost: { text: { contains: '@' } },
+    }
+
     const [
       totalMatches,
       totalApplied,
       avgMatchScoreResult,
       emailStats
     ] = await Promise.all([
-      // 1. Total Matches (from ScrapedPostMatch table, not applied)
+      // 1. Total visible matches today: shown, has email, not applied
       prisma.scrapedPostMatch.count({
         where: {
-          user_id: userId,
-          NOT: {
-            OR: [
-              { applied: true },
-              {
-                scrapedPost: {
-                  applications: { some: { user_id: userId } }
-                }
-              }
-            ]
+          ...todayShownFilter,
+          applied: false,
+          scrapedPost: {
+            text: { contains: '@' },
+            applications: { none: { user_id: userId } }  // use none: not NOT+some
           }
         }
       }),
 
-      // 2. Applied Count - count through ScrapedPostMatch
+      // 2. Applied count today: shown, has email, applied via the platform
       prisma.scrapedPostMatch.count({
         where: {
-          user_id: userId,
+          ...todayShownFilter,
           OR: [
-            { applied: true },  // Marked as applied in match
-            {
-              scrapedPost: {
-                applications: { some: { user_id: userId } }  // Has application record
-              }
-            }
+            { applied: true },
+            { scrapedPost: { applications: { some: { user_id: userId } } } }
           ]
         }
       }),
 
-      // 3. Average Match Score
+      // 3. Average match score for today's shown, email-bearing posts
       prisma.scrapedPostMatch.aggregate({
-        where: {
-          user_id: userId
-        },
-        _avg: {
-          match_score: true
-        }
+        where: todayShownFilter,
+        _avg: { match_score: true }
       }),
 
       // 4. Response Rate stats (Applications vs Replies)

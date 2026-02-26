@@ -18,19 +18,15 @@ async function getDashboardStats(userId: string) {
       applicationsCount,
       emailStats
     ] = await Promise.all([
-      // 1. Job Matches (Actionable: contains "@" and NOT applied)
+      // 1. Actionable matches: shown today, has email, not yet applied
       prisma.scrapedPostMatch.count({
         where: {
           user_id: userId,
-          NOT: {
-            OR: [
-              { applied: true },
-              {
-                scrapedPost: {
-                  applications: { some: { user_id: userId } }
-                }
-              }
-            ]
+          shown_to_user: true,
+          applied: false,
+          scrapedPost: {
+            text: { contains: '@' },
+            applications: { none: { user_id: userId } }
           }
         }
       }),

@@ -126,20 +126,18 @@ export class DailyLimitService {
     }
 
     /**
-     * Check if user can scrape more jobs
+     * Check if user can scrape more jobs.
+     * Counts directly from ScrapedPostMatch so the limit is enforced even
+     * when the DB counter was behind.
      */
     static async checkDailyLimit(userId: string): Promise<{ canScrape: boolean; reason?: string }> {
         try {
-            // First, reset if needed
             await this.resetDailyLimitIfNeeded(userId)
 
             const [user, dailyLimit] = await Promise.all([
                 (prisma as any).user.findUnique({
                     where: { id: userId },
-                    select: {
-                        daily_matched_jobs_count: true,
-                        daily_limit_reset_at: true
-                    }
+                    select: { daily_limit_reset_at: true }
                 }),
                 this.getDailyJobLimit(userId)
             ])
@@ -148,19 +146,26 @@ export class DailyLimitService {
                 return { canScrape: false, reason: 'User not found' }
             }
 
-            const currentCount = (user as any).daily_matched_jobs_count || 0
+            const windowStart = this.getDailyWindowStart((user as any).daily_limit_reset_at)
+            const currentCount = await (prisma as any).scrapedPostMatch.count({
+                where: {
+                    user_id: userId,
+                    shown_to_user: true,
+                    shown_at: { gte: windowStart },
+                    scrapedPost: { text: { contains: '@' } }
+                }
+            })
 
             if (currentCount >= dailyLimit) {
                 return {
                     canScrape: false,
-                    reason: `Daily limit reached (${currentCount}/${dailyLimit}). Reset at ${(user as any).daily_limit_reset_at?.toISOString()}`
+                    reason: `Daily limit reached (${currentCount}/${dailyLimit}). Resets at ${(user as any).daily_limit_reset_at?.toISOString()}`
                 }
             }
 
             return { canScrape: true }
         } catch (error) {
             console.error('Error checking daily limit:', error)
-            // On error, allow scraping to prevent blocking users
             return { canScrape: true }
         }
     }
@@ -191,11 +196,33 @@ export class DailyLimitService {
     }
 
     /**
-     * Get detailed daily limit information
+     * Calculate the start of the current daily window in IST.
+     * This mirrors ScrapedPosts.tsx's limitWindowStart logic.
+     */
+    static getDailyWindowStart(dailyLimitResetAt: Date | null): Date {
+        const now = new Date()
+        if (dailyLimitResetAt && dailyLimitResetAt > now) {
+            // We're inside the current 24-h window; it started 24 h before next reset
+            return new Date(dailyLimitResetAt.getTime() - 24 * 60 * 60 * 1000)
+        }
+        // Fallback: midnight today in IST
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+        const nowIST = new Date(now.getTime() + IST_OFFSET_MS)
+        const year = nowIST.getUTCFullYear()
+        const month = nowIST.getUTCMonth()
+        const day = nowIST.getUTCDate()
+        const midnightIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0))
+        return new Date(midnightIST.getTime() - IST_OFFSET_MS)
+    }
+
+    /**
+     * Get detailed daily limit information.
+     * Uses the real ScrapedPostMatch count so the progress bar is always accurate,
+     * even for posts that were shown before the counter was wired up.
      */
     static async getDailyLimitInfo(userId: string): Promise<DailyLimitInfo> {
         try {
-            // First, reset if needed
+            // Ensure reset window is initialised
             await this.resetDailyLimitIfNeeded(userId)
 
             const [user, dailyLimit] = await Promise.all([
@@ -213,19 +240,64 @@ export class DailyLimitService {
                 throw new Error('User not found')
             }
 
-            const current = (user as any).daily_matched_jobs_count || 0
-            const resetAt = (user as any).daily_limit_reset_at || this.calculateResetTime()
+            const resetAt: Date = (user as any).daily_limit_reset_at || this.calculateResetTime()
+            const windowStart = this.getDailyWindowStart((user as any).daily_limit_reset_at)
+
+            // Count actual posts shown today from ScrapedPostMatch — this is always
+            // accurate, even for posts shown before the DB counter was wired up
+            let actualCount = await (prisma as any).scrapedPostMatch.count({
+                where: {
+                    user_id: userId,
+                    shown_to_user: true,
+                    shown_at: { gte: windowStart },
+                    scrapedPost: { text: { contains: '@' } }
+                }
+            })
+
+            // If we exceeded the limit (race condition / old data), hide the excess
+            // posts immediately — keep the earliest ones, remove the most recent
+            if (actualCount > dailyLimit) {
+                const excess = actualCount - dailyLimit
+                const excessMatches = await (prisma as any).scrapedPostMatch.findMany({
+                    where: {
+                        user_id: userId,
+                        shown_to_user: true,
+                        shown_at: { gte: windowStart },
+                        scrapedPost: { text: { contains: '@' } }
+                    },
+                    orderBy: { shown_at: 'desc' },
+                    take: excess,
+                    select: { id: true }
+                })
+                if (excessMatches.length > 0) {
+                    await (prisma as any).scrapedPostMatch.updateMany({
+                        where: { id: { in: excessMatches.map((m: any) => m.id) } },
+                        data: { shown_to_user: false, shown_at: null }
+                    })
+                    console.log(`[DailyLimit] Removed ${excessMatches.length} excess posts for user ${userId} (was ${actualCount}, limit ${dailyLimit})`)
+                    actualCount = dailyLimit
+                }
+            }
+
+            // Sync the DB counter
+            if (actualCount !== ((user as any).daily_matched_jobs_count || 0)) {
+                await (prisma as any).user.update({
+                    where: { id: userId },
+                    data: { daily_matched_jobs_count: actualCount }
+                })
+            }
+
             const now = new Date()
             const hoursUntilReset = Math.max(0, (resetAt.getTime() - now.getTime()) / (1000 * 60 * 60))
-            const percentageUsed = (current / dailyLimit) * 100
+            const percentageUsed = Math.min(100, Math.round((actualCount / dailyLimit) * 100))
 
             return {
-                current,
+                current: actualCount,
                 limit: dailyLimit,
                 resetAt: resetAt.toISOString(),
-                canScrape: current < dailyLimit,
-                hoursUntilReset: Math.round(hoursUntilReset * 10) / 10, // Round to 1 decimal
-                percentageUsed: Math.round(percentageUsed)
+                canScrape: actualCount < dailyLimit,
+                hoursUntilReset: Math.round(hoursUntilReset * 10) / 10,
+                percentageUsed
             }
         } catch (error) {
             console.error('Error getting daily limit info:', error)

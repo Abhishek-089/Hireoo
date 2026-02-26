@@ -78,7 +78,9 @@ export class ScrapingService {
         }
       }
 
-      // Create match record linking this user to the post
+      // Create match record — shown_to_user starts false.
+      // The matching service will set it to true only if the post
+      // has an email address AND meets the keyword/score threshold.
       await prisma.scrapedPostMatch.create({
         data: {
           user_id: userId,
@@ -87,8 +89,8 @@ export class ScrapingService {
           match_quality: 'pending',
           scraped_by_user: true,
           scraped_at: new Date(),
-          shown_to_user: true,
-          shown_at: new Date(),
+          shown_to_user: false,
+          shown_at: null,
         },
       })
 
@@ -101,17 +103,21 @@ export class ScrapingService {
         console.warn('[ScrapingService] Failed to queue for AI extraction (non-critical):', queueError)
       }
 
-      // Run post qualification / matching (non-blocking)
+      // Run qualification / matching — determines whether the post is shown to the user
+      let qualified = false
       try {
         const { ScrapedPostMatchingService } = await import('./scraped-post-matching')
-        await ScrapedPostMatchingService.matchScrapedPostToUser(scrapedPost.id, userId)
+        const matchResult = await ScrapedPostMatchingService.matchScrapedPostToUser(scrapedPost.id, userId)
+        // matchResult is null when: no email, score too low, or daily limit reached
+        qualified = matchResult !== null
       } catch (matchError) {
         console.warn('[ScrapingService] Failed to run matching (non-critical):', matchError)
       }
 
       return {
         success: true,
-        message: 'Post stored successfully',
+        qualified,
+        message: qualified ? 'Post stored and qualified' : 'Post stored but did not qualify',
         postId: scrapedPost.id,
       }
     } catch (error) {

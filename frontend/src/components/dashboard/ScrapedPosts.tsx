@@ -3,6 +3,7 @@ import { ScrapedPostsClient } from "./ScrapedPostsClient"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { DailyLimitService } from "@/lib/daily-limit-service"
 
 function extractEmails(text: string): string[] {
   const regex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
@@ -19,6 +20,8 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
 
   const pageSize = 10
   const currentPage = page < 1 ? 1 : page
+  const userId = (session.user as any).id
+  const dailyLimit = await DailyLimitService.getDailyJobLimit(userId)
 
   let rawPosts: any[] = []
   let rawAppliedPosts: any[] = []
@@ -27,7 +30,7 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
   try {
     // Get user's daily limit reset time to filter posts shown today
     const user = await prisma.user.findUnique({
-      where: { id: (session.user as any).id },
+      where: { id: userId },
       select: { daily_limit_reset_at: true }
     })
 
@@ -52,17 +55,26 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
       limitWindowStart = new Date(todayMidnightIST.getTime() - IST_OFFSET_MS)
     }
 
-    const [rows, count, appliedRows] = await Promise.all([
-      // Get matched posts shown today (within daily limit)
+    const baseMatchWhere = {
+      user_id: userId,
+      applied: false,
+      shown_to_user: true,
+      shown_at: { gte: limitWindowStart },
+      // Only fetch posts whose text contains an email address (DB-level filter)
+      scrapedPost: {
+        text: { contains: '@' }
+      },
+    }
+
+    // Total posts to expose is capped at dailyLimit — even if more were stored
+    // (e.g. posts from before the limit enforcement was in place)
+    const cappedSkip = Math.min((currentPage - 1) * pageSize, dailyLimit)
+    const cappedTake = Math.min(pageSize, dailyLimit - cappedSkip)
+
+    const [rows, rawCount, appliedRows] = await Promise.all([
+      // Get matched posts shown today — capped to dailyLimit
       prisma.scrapedPostMatch.findMany({
-        where: {
-          user_id: (session.user as any).id,
-          applied: false,
-          shown_to_user: true,  // Only posts that were shown
-          shown_at: {
-            gte: limitWindowStart  // Only posts shown in current limit window
-          }
-        },
+        where: baseMatchWhere,
         include: {
           scrapedPost: {
             include: {
@@ -70,28 +82,22 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
             }
           }
         },
-        orderBy: { shown_at: "desc" },  // Most recently shown first
-        skip: (currentPage - 1) * pageSize,
-        take: pageSize,
+        orderBy: { shown_at: "desc" },
+        skip: cappedSkip,
+        take: cappedTake > 0 ? cappedTake : 0,
       }),
 
       // Count total matches shown today
       prisma.scrapedPostMatch.count({
-        where: {
-          user_id: (session.user as any).id,
-          applied: false,
-          shown_to_user: true,
-          shown_at: {
-            gte: limitWindowStart
-          }
-        },
+        where: baseMatchWhere,
       }),
 
-      // Get applied matches (no time limit on these)
+      // Get applied matches (no time limit; still require email in post text)
       prisma.scrapedPostMatch.findMany({
         where: {
-          user_id: (session.user as any).id,
+          user_id: userId,
           applied: true,
+          scrapedPost: { text: { contains: '@' } },
         },
         include: {
           scrapedPost: {
@@ -99,7 +105,7 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
               job: true,
               applications: {
                 where: {
-                  user_id: (session.user as any).id,
+                  user_id: userId,
                 },
                 select: {
                   id: true,
@@ -135,7 +141,8 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
 
     rawPosts = rows.map(mapMatchToPost)
     rawAppliedPosts = appliedRows.map(mapMatchToPost)
-    totalCount = count
+    // Cap the displayed total to dailyLimit so pagination reflects the enforced cap
+    totalCount = Math.min(rawCount, dailyLimit)
 
   } catch (error) {
     console.error("ScrapedPosts failed to load from database:", error)
@@ -173,10 +180,10 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
     };
   }
 
-  // Process non-applied posts
-  const posts = rawPosts.map((post: any) => {
-    return enrichPost(post);
-  })
+  // Process non-applied posts — only include posts that have at least one email
+  const posts = rawPosts
+    .map((post: any) => enrichPost(post))
+    .filter((post: any) => post.emails.length > 0)
 
   // Process applied posts
   const appliedPosts = await Promise.all(
@@ -198,7 +205,7 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
         try {
           const emailLogs = await prisma.emailLog.findMany({
             where: {
-              user_id: (session.user as any).id,
+              user_id: userId,
               thread_id: application.gmail_thread_id,
               direction: 'received',
               is_reply: true,
