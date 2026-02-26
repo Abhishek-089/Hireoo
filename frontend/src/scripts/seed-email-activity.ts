@@ -18,7 +18,6 @@ async function seedEmailActivity() {
         // but the API I wrote checks `app.scrapedPost.job`.
         const scrapedPost = await prisma.scrapedPost.create({
             data: {
-                user_id: user.id,
                 post_url: 'https://www.linkedin.com/jobs/view/senior-react-dev-999',
                 linkedin_id: `mock-job-${Date.now()}`,
                 text: 'Senior React Developer at TechCorp...',

@@ -38,6 +38,8 @@
   ],
   "exclude": [
     "node_modules",
-    "test_redis_conn.ts"
+    "test_redis_conn.ts",
+    "scripts",
+    "src/scripts"
   ]
 }

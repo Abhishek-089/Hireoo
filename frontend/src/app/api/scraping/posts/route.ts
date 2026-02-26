@@ -265,22 +265,21 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'all'
     const skip = (page - 1) * limit
 
-    // Build where clause
-    const where: any = { user_id: userId }
-    if (status !== 'all') {
-      where.status = status
-    }
+    // Get posts via ScrapedPostMatch (user-specific)
+    const matchWhere: any = { user_id: userId }
 
-    // Get total count
-    const totalCount = await prisma.scrapedPost.count({ where })
+    const [totalCount, matches] = await Promise.all([
+      prisma.scrapedPostMatch.count({ where: matchWhere }),
+      prisma.scrapedPostMatch.findMany({
+        where: matchWhere,
+        orderBy: { matched_at: 'desc' },
+        skip,
+        take: limit,
+        include: { scrapedPost: true },
+      }),
+    ])
 
-    // Get posts
-    const posts = await prisma.scrapedPost.findMany({
-      where,
-      orderBy: { created_at: 'desc' },
-      skip,
-      take: limit,
-    })
+    const posts = matches.map((m: any) => m.scrapedPost)
 
     return NextResponse.json({
       data: posts,
