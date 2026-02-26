@@ -38,8 +38,15 @@
   ],
   "exclude": [
     "node_modules",
-    "test_redis_conn.ts",
     "scripts",
-    "src/scripts"
+    "src/scripts",
+    "test_redis_conn.ts",
+    "check-db.ts",
+    "test-save.ts",
+    "test-scraper.ts",
+    "fix_unknown_data.ts",
+    "inspect_jobs.ts",
+    "check_schema.ts",
+    "ensure_all_matches_enriched.ts"
   ]
 }
