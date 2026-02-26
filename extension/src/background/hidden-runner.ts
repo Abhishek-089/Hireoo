@@ -685,6 +685,33 @@ export class HiddenRunner {
         return
       }
 
+      // Handle auth errors - token expired or user not found in DB
+      if (response.status === 401 || response.status === 403) {
+        const errData = await response.json().catch(() => ({}))
+        console.error('[HiddenRunner] ❌ Authentication failed - please re-authenticate the extension')
+        console.error('[HiddenRunner] Server message:', errData.error || 'Unauthorized')
+        console.warn('[HiddenRunner] 🔐 Action required: Open the Hireoo website, sign in, and then reload the extension')
+
+        // Clear stale auth so the extension popup shows the sign-in prompt
+        await ExtensionAuth.clearAuthData()
+
+        // Notify the user via Chrome notification
+        try {
+          await chrome.notifications.create({
+            type: 'basic',
+            iconUrl: '/icon.png',
+            title: 'Hireoo: Sign In Required',
+            message: 'Your session expired. Please open the Hireoo website, sign in, and reload the extension.',
+            priority: 2
+          })
+        } catch (notifError) {
+          console.warn('[HiddenRunner] Failed to show notification:', notifError)
+        }
+
+        await this.stop()
+        return
+      }
+
       if (response.ok) {
         const data = await response.json().catch(() => ({}))
         const successfulPosts = data.processed || 0

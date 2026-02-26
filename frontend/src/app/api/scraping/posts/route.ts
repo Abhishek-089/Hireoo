@@ -21,12 +21,25 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[API] POST /api/scraping/posts - Request received')
 
-    let userId = await getUserIdFromRequest(request)
+    const userId = await getUserIdFromRequest(request)
     console.log('[API] User ID from request:', userId ? 'Found' : 'Not found')
 
     if (!userId) {
-      console.warn('[API] Unauthorized - faking user ID for now')
-      userId = "cmlp5rwd00000tm0hi0fswvyx"
+      console.error('[API] Unauthorized - no valid user ID in request (token missing or expired)')
+      return NextResponse.json(
+        { error: 'Unauthorized - please sign in to Hireoo and reconnect the extension' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    // Verify the user actually exists in the DB (catches dev-token vs prod-DB mismatches)
+    const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!userExists) {
+      console.error(`[API] User ${userId} not found in database - JWT may be from a different environment`)
+      return NextResponse.json(
+        { error: 'User not found - please sign in to the Hireoo website and reconnect the extension' },
+        { status: 401, headers: corsHeaders }
+      )
     }
 
     let body
