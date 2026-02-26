@@ -80,8 +80,17 @@ const Popup: React.FC = () => {
 
   const handleLogin = () => {
     const appBaseUrl = import.meta.env.VITE_APP_URL || 'http://localhost:3000'
-    const loginUrl = `${appBaseUrl}/signin?from=extension=1`
-    chrome.tabs.create({ url: loginUrl })
+    chrome.tabs.create({ url: `${appBaseUrl}/signin` })
+  }
+
+  const handleSignup = () => {
+    const appBaseUrl = import.meta.env.VITE_APP_URL || 'http://localhost:3000'
+    chrome.tabs.create({ url: `${appBaseUrl}/signup` })
+  }
+
+  const handleOpenDashboard = () => {
+    const appBaseUrl = import.meta.env.VITE_APP_URL || 'http://localhost:3000'
+    chrome.tabs.create({ url: `${appBaseUrl}/dashboard` })
   }
 
   const handleLogout = async () => {
@@ -215,7 +224,7 @@ const Popup: React.FC = () => {
                 href="#"
                 onClick={(e) => {
                   e.preventDefault()
-                  chrome.tabs.create({ url: `${import.meta.env.VITE_APP_URL || 'http://localhost:3000'}/signup` })
+                  handleSignup()
                 }}
                 className="text-indigo-600 hover:text-indigo-700 font-semibold"
               >
@@ -335,7 +344,7 @@ const Popup: React.FC = () => {
             )}
 
             <button
-              onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL('../frontend/dashboard.html') || `${import.meta.env.VITE_APP_URL || 'https://hireoo.com'}/dashboard` })}
+              onClick={handleOpenDashboard}
               className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3.5 px-4 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 flex items-center justify-center"
             >
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
