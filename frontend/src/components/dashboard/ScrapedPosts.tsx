@@ -1,15 +1,9 @@
-
 import { ScrapedPostsClient } from "./ScrapedPostsClient"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { DailyLimitService } from "@/lib/daily-limit-service"
-
-function extractEmails(text: string): string[] {
-  const regex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
-  const matches = text.match(regex)
-  return matches ? Array.from(new Set(matches)) : []
-}
+import { extractEmails } from "@/lib/utils"
 
 export async function ScrapedPosts({ page = 1 }: { page?: number }) {
   const session = await getServerSession(authOptions)

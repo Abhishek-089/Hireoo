@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
         id: true,
         email: true,
         name: true,
+        skills: true,
+        preferred_job_titles: true,
       },
     })
 
@@ -37,6 +39,10 @@ export async function GET(request: NextRequest) {
       id: user.id,
       email: user.email,
       name: user.name,
+      // Embed search preferences so the extension never needs a separate API call
+      // for keywords — this eliminates any risk of returning another user's data.
+      skills: user.skills ?? [],
+      preferred_job_titles: user.preferred_job_titles ?? [],
       iat: now,
       exp: now + 24 * 60 * 60, // 24 hours
     }

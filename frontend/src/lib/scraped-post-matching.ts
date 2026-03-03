@@ -213,7 +213,8 @@ export class ScrapedPostMatchingService {
   }
 
   /**
-   * Match all scraped posts for a user
+   * Match all scraped posts for a user.
+   * Re-runs matching for every post this user has ever seen (to refresh scores).
    */
   static async matchAllScrapedPostsForUser(userId: string): Promise<{
     total: number
@@ -223,16 +224,13 @@ export class ScrapedPostMatchingService {
     bad: number
   }> {
     try {
-      // Get all posts for this user through ScrapedPostMatch
+      // Get all posts already associated with this user (regardless of who scraped them)
       const matches = await prisma.scrapedPostMatch.findMany({
-        where: {
-          user_id: userId,
-          scraped_by_user: true  // Only posts this user scraped
-        },
+        where: { user_id: userId },
         select: { scraped_post_id: true },
       })
 
-      const posts = matches.map(m => ({ id: m.scraped_post_id }))
+      const posts = matches.map((m: { scraped_post_id: string }) => ({ id: m.scraped_post_id }))
 
       let matched = 0
       let good = 0
@@ -249,16 +247,119 @@ export class ScrapedPostMatchingService {
         }
       }
 
-      return {
-        total: posts.length,
-        matched,
-        good,
-        medium,
-        bad,
-      }
+      return { total: posts.length, matched, good, medium, bad }
     } catch (error) {
       console.error('Error matching all scraped posts:', error)
       throw error
+    }
+  }
+
+  /**
+   * Fill a user's job matches from the global ScrapedPost pool WITHOUT running
+   * the LinkedIn scraper.  Called at the start of every automation run so we
+   * reuse posts other users have already scraped before touching LinkedIn.
+   *
+   * Returns the number of posts that were qualified and shown to this user so
+   * the extension knows how many more it still needs to scrape from LinkedIn.
+   */
+  static async fillFromGlobalPool(userId: string): Promise<{
+    found: number    // posts in DB that match keywords and have no existing match for this user
+    qualified: number // of those, how many passed all filters and are now shown
+  }> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          skills: true,
+          preferred_job_titles: true,
+          job_types: true,
+          remote_work_preferred: true,
+        },
+      })
+
+      if (!user) return { found: 0, qualified: 0 }
+
+      // Build keyword list from user's skills and job titles ONLY (not generic terms
+      // like "remote" / "freelance" which match almost every job post and produce
+      // irrelevant pool fills)
+      const keywords = [
+        ...(user.skills ?? []),
+        ...(user.preferred_job_titles ?? []),
+      ].map((k: string) => k.toLowerCase()).filter(Boolean)
+
+      if (keywords.length === 0) return { found: 0, qualified: 0 }
+
+      // 3-day recency window — pool posts older than 3 days are likely stale
+      const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+
+      // Fetch posts from the global pool that:
+      //  • have an email address (text contains '@')
+      //  • are recent (last 7 days)
+      //  • have NOT already been associated with this user
+      // Limit 200 so we never do a full table scan
+      const poolPosts = await prisma.scrapedPost.findMany({
+        where: {
+          text: { contains: '@' },
+          created_at: { gte: since },
+          matches: { none: { user_id: userId } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 200,
+        select: { id: true, text: true },
+      })
+
+      // Only use keywords that are at least 6 characters to avoid single generic words
+      // (e.g. "dev", "js") matching completely irrelevant posts
+      const meaningfulKeywords = keywords.filter((kw) => kw.length >= 6)
+      if (meaningfulKeywords.length === 0) return { found: 0, qualified: 0 }
+
+      // Filter in-memory: post must contain ALL words of at least one keyword phrase
+      // e.g. "frontend developer" requires BOTH "frontend" AND "developer" to appear
+      const relevant = poolPosts.filter((post: { id: string; text: string }) => {
+        const text = post.text.toLowerCase()
+        return meaningfulKeywords.some((kw) => {
+          // Split multi-word keyword into individual words and require all to appear
+          const words = kw.split(/\s+/).filter((w) => w.length >= 3)
+          return words.every((word) => text.includes(word))
+        })
+      })
+
+      if (relevant.length === 0) return { found: 0, qualified: 0 }
+
+      // Create ScrapedPostMatch stubs (shown_to_user: false) so matchScrapedPostToUser
+      // can upsert them.  We do this in bulk before the loop for performance.
+      const now = new Date()
+      // createMany with skipDuplicates protects against any race condition
+      await prisma.scrapedPostMatch.createMany({
+        data: relevant.map((post: { id: string; text: string }) => ({
+          user_id: userId,
+          scraped_post_id: post.id,
+          scraped_by_user: false, // came from pool, not scraped by this user
+          scraped_at: now,
+          shown_to_user: false,
+          shown_at: null,
+          match_score: 0,
+          match_quality: 'bad',
+        })),
+        skipDuplicates: true,
+      })
+
+      // Now run the full matching pipeline (email check, score, daily limit) for each
+      let qualified = 0
+      for (const post of relevant) {
+        // Stop early if the user's daily limit is already reached
+        const limitCheck = await DailyLimitService.checkDailyLimit(userId)
+        if (!limitCheck.canScrape) break
+
+        const result = await this.matchScrapedPostToUser(post.id, userId)
+        if (result) qualified++
+      }
+
+      console.log(`[Pool] User ${userId}: found ${relevant.length} relevant posts in pool, ${qualified} qualified`)
+      return { found: relevant.length, qualified }
+    } catch (error) {
+      console.error('[Pool] Error filling from global pool:', error)
+      return { found: 0, qualified: 0 }
     }
   }
 
@@ -337,47 +438,8 @@ export class ScrapedPostMatchingService {
 
   private static async enrichMatchWithAI(match: any, postText: string, postUrl: string) {
     try {
-      // Check if job already exists to avoid duplicate work
-      const existingJob = await prisma.job.findUnique({
-        where: { scraped_post_id: match.scraped_post_id }
-      })
-      if (existingJob) return
-
-      console.log(`Triggering AI Enrichment for match ${match.id}...`)
-      const response = await fetch("http://localhost:8000/api/v1/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          raw_text: postText,
-          raw_html: "<div></div>"
-        })
-      })
-
-      if (!response.ok) {
-        console.error(`AI Service Error ${response.status}: ${await response.text()}`)
-        return
-      }
-
-      const responseData = await response.json()
-
-      if (responseData.success && responseData.data) {
-        const extractedData = responseData.data
-
-        await prisma.job.create({
-          data: {
-            scraped_post_id: match.scraped_post_id,
-            title: extractedData.job_title || null,
-            company: extractedData.company || null,
-            location: extractedData.location || "Remote",
-            salary_range: extractedData.salary_range,
-            skills: extractedData.skills || [],
-            description: postText,
-            posted_date: new Date(),
-            source_url: postUrl
-          }
-        })
-        console.log(`✅ Created Job for Match ${match.id}`)
-      }
+      const { enrichScrapedPost } = await import('./ai-enrichment')
+      await enrichScrapedPost(match.scraped_post_id, postText, postUrl)
     } catch (e) {
       console.error("AI Enrichment Failed:", e)
     }

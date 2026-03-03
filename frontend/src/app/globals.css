@@ -123,3 +123,51 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Homepage animations ── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(1deg); }
+}
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-12px) scale(1.02); }
+}
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes mesh-move {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  33% { transform: translate(30px, -20px) rotate(120deg); }
+  66% { transform: translate(-20px, 20px) rotate(240deg); }
+  100% { transform: translate(0, 0) rotate(360deg); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(32px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+.animate-gradient-shift { animation: gradient-shift 8s ease infinite; background-size: 200% 200%; }
+.animate-mesh-move { animation: mesh-move 20s ease-in-out infinite; }
+.animate-pulse-soft { animation: pulse-soft 4s ease-in-out infinite; }
+.animate-slide-in-up { animation: slide-in-up 0.7s ease-out both; }
+
+@keyframes drift {
+  0%   { transform: translateY(0px)   translateX(0px)   rotate(var(--r, -6deg)); }
+  33%  { transform: translateY(-14px) translateX(6px)   rotate(calc(var(--r, -6deg) + 4deg)); }
+  66%  { transform: translateY(6px)   translateX(-8px)  rotate(calc(var(--r, -6deg) - 3deg)); }
+  100% { transform: translateY(0px)   translateX(0px)   rotate(var(--r, -6deg)); }
+}
+.animate-drift { animation: drift var(--dur, 7s) ease-in-out infinite; }
+
+/* Orbital tag animations (3-element pattern: outer arm / translate / counter-rotate) */
+@keyframes orbit-cw  { from { transform: rotate(0deg);    } to { transform: rotate(360deg);  } }
+@keyframes orbit-ccw { from { transform: rotate(0deg);    } to { transform: rotate(-360deg); } }

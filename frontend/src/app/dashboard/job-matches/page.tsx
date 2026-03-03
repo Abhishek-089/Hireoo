@@ -1,13 +1,14 @@
 import { ScrapedPosts } from "@/components/dashboard/ScrapedPosts"
-import { Button } from "@/components/ui/button"
+import { JobMatchesLoader } from "@/components/dashboard/JobMatchesLoader"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Briefcase, Plus, Filter } from "lucide-react"
+import { Briefcase } from "lucide-react"
 
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { DailyLimitService } from "@/lib/daily-limit-service"
+import { ScrapedPostMatchingService } from "@/lib/scraped-post-matching"
 
 type JobMatchesPageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -137,16 +138,32 @@ export default async function JobMatchesPage({ searchParams }: JobMatchesPagePro
   const session = await getServerSession(authOptions)
 
   const userId = (session?.user as any)?.id
-  const stats = userId
-    ? await getJobMatchStats(userId)
-    : { totalMatches: 0, totalApplied: 0, responseRate: 0, avgMatchScore: "0.0" }
+  if (!userId) {
+    return <div>Please sign in to view job matches.</div>
+  }
 
   const awaitedSearchParams = await searchParams
   const pageParam = awaitedSearchParams?.page
   const pageStr = Array.isArray(pageParam) ? pageParam[0] : pageParam
   const page = pageStr ? Math.max(1, parseInt(pageStr, 10) || 1) : 1
+  const fromOnboarding = awaitedSearchParams?.from === "onboarding"
 
-  return (
+  // Always trigger pool matching server-side to pull in scraper posts
+  try {
+    await ScrapedPostMatchingService.fillFromGlobalPool(userId)
+  } catch (e) {
+    console.error("Pool fill error:", e)
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { skills: true },
+  })
+  const keyword = user?.skills?.[0] || ""
+
+  const stats = await getJobMatchStats(userId)
+
+  const content = (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -154,16 +171,6 @@ export default async function JobMatchesPage({ searchParams }: JobMatchesPagePro
           <p className="mt-2 text-gray-600">
             AI-matched job opportunities based on your profile and preferences.
           </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button variant="outline">
-            <Filter className="h-4 w-4 mr-2" />
-            Filter
-          </Button>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Manual Search
-          </Button>
         </div>
       </div>
 
@@ -218,4 +225,10 @@ export default async function JobMatchesPage({ searchParams }: JobMatchesPagePro
       <ScrapedPosts page={page} />
     </div>
   )
+
+  if (fromOnboarding) {
+    return <JobMatchesLoader keyword={keyword}>{content}</JobMatchesLoader>
+  }
+
+  return content
 }

@@ -1,90 +1,273 @@
 import Link from "next/link"
-import Image from "next/image"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ArrowRight, CheckCircle, Sparkles } from "lucide-react"
-import { EXTENSION_CONFIG } from "@/config/extension"
+import { ArrowRight, Mail, Briefcase, Zap, CheckCircle2 } from "lucide-react"
+
+const JOB_FEED = [
+  { role: "Senior Frontend Developer", company: "Razorpay", location: "Bangalore", tag: "Remote ok", email: "hr@razorpay.com", time: "2m ago" },
+  { role: "Full Stack Engineer", company: "Groww", location: "Mumbai", tag: "Full-time", email: "talent@groww.in", time: "7m ago" },
+  { role: "Backend Engineer (Node.js)", company: "CRED", location: "Bangalore", tag: "Hybrid", email: "careers@cred.club", time: "11m ago" },
+  { role: "React Native Developer", company: "Zepto", location: "Delhi", tag: "On-site", email: "hiring@zepto.team", time: "16m ago" },
+]
+
+// Each tag carries its own colour palette (bg / border / text / dot)
+const ORBIT_TAGS = [
+  // ── Right side (3 o'clock) ──
+  { label: "React.js",    r: 620, dur: 32, angle: 10,  cw: true,  bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8", dot: "#3b82f6" },
+  { label: "Next.js",     r: 590, dur: 40, angle: 350, cw: true,  bg: "#f8fafc", border: "#cbd5e1", text: "#334155", dot: "#64748b" },
+  { label: "Figma",       r: 640, dur: 36, angle: 30,  cw: true,  bg: "#fdf4ff", border: "#e9d5ff", text: "#7e22ce", dot: "#a855f7" },
+  { label: "Python",      r: 605, dur: 38, angle: 355, cw: false, bg: "#fefce8", border: "#fde68a", text: "#92400e", dot: "#f59e0b" },
+  // ── Top-right ──
+  { label: "Node.js",     r: 610, dur: 44, angle: 55,  cw: false, bg: "#f0fdf4", border: "#bbf7d0", text: "#15803d", dot: "#22c55e" },
+  { label: "Docker",      r: 595, dur: 41, angle: 80,  cw: true,  bg: "#f0f9ff", border: "#bae6fd", text: "#0369a1", dot: "#0ea5e9" },
+  // ── Top-left ──
+  { label: "UI / UX",    r: 615, dur: 33, angle: 105, cw: true,  bg: "#fff1f2", border: "#fecdd3", text: "#be123c", dot: "#f43f5e" },
+  { label: "Kubernetes",  r: 600, dur: 35, angle: 130, cw: false, bg: "#eff6ff", border: "#93c5fd", text: "#1e3a8a", dot: "#2563eb" },
+  // ── Left side (9 o'clock) ──
+  { label: "TypeScript",  r: 625, dur: 34, angle: 168, cw: true,  bg: "#eef2ff", border: "#c7d2fe", text: "#3730a3", dot: "#6366f1" },
+  { label: "SQL",         r: 595, dur: 42, angle: 182, cw: true,  bg: "#f0fdfa", border: "#99f6e4", text: "#0f766e", dot: "#14b8a6" },
+  { label: "CSS",         r: 610, dur: 30, angle: 195, cw: false, bg: "#fff7ed", border: "#fed7aa", text: "#c2410c", dot: "#f97316" },
+  { label: "AWS",         r: 600, dur: 37, angle: 210, cw: false, bg: "#fffbeb", border: "#fde68a", text: "#b45309", dot: "#f59e0b" },
+  // ── Bottom-left ──
+  { label: "DevOps",      r: 618, dur: 43, angle: 232, cw: true,  bg: "#f0fdfa", border: "#5eead4", text: "#134e4a", dot: "#0d9488" },
+  { label: "Redux",       r: 598, dur: 39, angle: 252, cw: false, bg: "#faf5ff", border: "#e9d5ff", text: "#6b21a8", dot: "#8b5cf6" },
+  // ── Bottom-right ──
+  { label: "Linux",       r: 608, dur: 36, angle: 278, cw: true,  bg: "#f7fee7", border: "#bef264", text: "#365314", dot: "#65a30d" },
+  { label: "Git",         r: 592, dur: 31, angle: 315, cw: false, bg: "#fff1f2", border: "#fecdd3", text: "#9f1239", dot: "#e11d48" },
+]
 
 export function Hero() {
   return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      {/* Background decoration */}
-      <div className="absolute inset-0">
-        <div className="absolute inset-y-0 right-1/2 -z-10 mr-16 w-[200%] origin-bottom-left skew-x-[-30deg] bg-gradient-to-br from-blue-100 to-indigo-100 shadow-xl shadow-indigo-600/10 ring-1 ring-indigo-50 sm:mr-28 lg:mr-0 xl:mr-16 xl:origin-center" />
+    <div className="relative bg-white">
+      {/* ── BACKGROUND LAYERS — each clipped individually ── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[600px] bg-gradient-to-b from-indigo-100/60 via-purple-50/30 to-transparent blur-3xl" />
+        <div className="absolute top-16 left-[5%] w-72 h-72 bg-indigo-100/50 rounded-full blur-3xl animate-float-slow" />
+        <div className="absolute top-8 right-[5%] w-56 h-56 bg-purple-100/40 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-white to-transparent" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-6 py-24 sm:py-10 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          {/* Badge */}
-          <Badge variant="secondary" className="mb-8 px-4 py-2 text-sm font-medium">
-            <Sparkles className="mr-2 h-4 w-4" />
-            AI-Powered Job Search Automation
-          </Badge>
+      {/* Dot grid */}
+      <div
+        className="absolute inset-0 opacity-60 overflow-hidden"
+        style={{
+          backgroundImage: "radial-gradient(circle, #a5b4fc 1.2px, transparent 1.2px)",
+          backgroundSize: "28px 28px",
+          maskImage: "radial-gradient(ellipse 90% 70% at 50% 0%, black 20%, transparent 80%)",
+          WebkitMaskImage: "radial-gradient(ellipse 90% 70% at 50% 0%, black 20%, transparent 80%)",
+        }}
+      />
 
-          {/* Headline */}
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl lg:text-7xl">
-            Automate Your{" "}
-            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              Job Search
-            </span>{" "}
-            with AI
-          </h1>
+      {/* Radial highlight */}
+      <div
+        className="absolute inset-0 opacity-40 overflow-hidden"
+        style={{
+          background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99,102,241,0.12) 0%, transparent 70%)",
+        }}
+      />
 
-          {/* Subheadline */}
-          <p className="mt-6 text-lg leading-8 text-gray-600 sm:text-xl">
-            Connect your Gmail, install our Chrome extension, and let AI discover opportunities,
-            match them to your profile, and send personalized cold emails automatically.
-          </p>
-
-          {/* CTA Buttons */}
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/signup">
-              <Button size="lg" className="px-8 py-3 text-lg w-full sm:w-auto">
-                Get Started Free
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-            <Link href={EXTENSION_CONFIG.storeUrl} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="lg" className="px-8 py-3 text-lg w-full sm:w-auto">
-                <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 14.894c-1.184 2.05-3.39 3.427-5.894 3.427a6.75 6.75 0 01-5.894-3.427l2.947-5.105a3.375 3.375 0 116.894 0l2.947 5.105z" />
-                </svg>
-                Install Extension
-              </Button>
-            </Link>
-
+      {/* ── ORBITING SKILL TAGS (desktop only) ──
+          3-element orbit pattern per tag:
+            1. Arm div     → only rotates (orbit-cw / orbit-ccw)
+            2. Offset div  → only translateX(radius), NO animation, so never overridden
+            3. Counter div → counter-rotates so chip text stays upright
+          Pivot at top:50% spans the full hero content (headline → dashboard).
+      */}
+      {ORBIT_TAGS.map((t) => {
+        const delay = `${(-(t.angle / 360) * t.dur).toFixed(2)}s`
+        const fwd   = t.cw ? "orbit-cw"  : "orbit-ccw"
+        const back  = t.cw ? "orbit-ccw" : "orbit-cw"
+        return (
+          <div
+            key={t.label}
+            className="hidden xl:block absolute pointer-events-none"
+            style={{ top: "42%", left: "50%", width: 0, height: 0 }}
+          >
+            {/* 1 — Rotating arm */}
+            <div style={{ animation: `${fwd} ${t.dur}s linear infinite`, animationDelay: delay }}>
+              {/* 2 — Translate to orbit radius (no animation = cannot be overridden) */}
+              <div style={{ transform: `translateX(${t.r}px)` }}>
+                {/* 3 — Counter-rotate so chip stays upright */}
+                <div style={{ animation: `${back} ${t.dur}s linear infinite`, animationDelay: delay }}>
+                  {/* Coloured pill chip — centred on orbit point */}
+                  <div
+                    className="select-none"
+                    style={{
+                      display: "inline-block",
+                      width: "max-content",
+                      transform: "translate(-50%, -50%)",
+                      padding: "7px 18px",
+                      borderRadius: "999px",
+                      background: t.bg,
+                      border: `1.5px solid ${t.border}`,
+                      boxShadow: `0 4px 20px 0 ${t.dot}30, 0 1px 4px rgba(0,0,0,0.07)`,
+                      whiteSpace: "nowrap",
+                      backdropFilter: "blur(8px)",
+                    }}
+                  >
+                    <span
+                      className="font-semibold leading-none tracking-wide"
+                      style={{ fontSize: 12, color: t.text }}
+                    >
+                      {t.label}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        )
+      })}
 
-          {/* Trust indicators */}
-          <div className="mt-12 flex items-center justify-center gap-x-8 text-sm text-gray-500">
-            <div className="flex items-center gap-x-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              <span>No credit card required</span>
+      <div className="relative max-w-6xl mx-auto px-6 lg:px-8 pt-28 pb-0">
+        {/* Pill badge */}
+        <div className="flex justify-center mb-6">
+          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-xs font-medium text-indigo-600 shadow-sm">
+            <span className="flex h-1.5 w-1.5 rounded-full bg-indigo-500 relative">
+              <span className="absolute inset-0 rounded-full bg-indigo-500 animate-ping opacity-60" />
+            </span>
+            New top jobs added every hour
+          </span>
+        </div>
+
+        {/* Headline */}
+        <div className="text-center max-w-3xl mx-auto">
+          <h1 className="text-5xl sm:text-6xl lg:text-[68px] font-bold tracking-tight text-gray-900 leading-[1.05]">
+            The{" "}
+            <span className="relative inline-block">
+              <span className="text-indigo-500">fastest way</span>
+              <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 8" fill="none">
+                <path d="M2 6C60 2 140 1 298 6" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+            </span>
+            {" "}to land{" "}
+            <br className="hidden sm:block" />
+            your next job.
+          </h1>
+          <p className="mt-5 text-lg text-gray-500 max-w-xl mx-auto leading-relaxed">
+            We surface fresh job openings every hour, match them to your profile,
+            and apply on your behalf — one click, zero effort.
+          </p>
+        </div>
+
+        {/* CTA row */}
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link
+            href="/signup"
+            className="group flex items-center gap-2 px-7 py-3.5 bg-gray-900 text-white text-sm font-semibold rounded-full hover:bg-gray-800 transition-all duration-200 shadow-lg shadow-gray-900/15"
+          >
+            Start for free
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <Link
+            href="/how-it-works"
+            className="flex items-center gap-2 px-7 py-3.5 border border-gray-200 text-gray-600 hover:text-gray-900 text-sm font-medium rounded-full hover:bg-gray-50 transition-all"
+          >
+            See how it works
+          </Link>
+        </div>
+
+        {/* Trust row */}
+        <div className="mt-5 flex items-center justify-center gap-5 text-xs text-gray-400">
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-indigo-400" />
+            No credit card
+          </span>
+          <span className="w-px h-3 bg-gray-200" />
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-indigo-400" />
+            Free to start
+          </span>
+          <span className="w-px h-3 bg-gray-200" />
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-indigo-400" />
+            Cancel anytime
+          </span>
+        </div>
+
+        {/* Dashboard mockup */}
+        <div className="mt-12 relative max-w-4xl mx-auto">
+          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-3/4 h-12 bg-indigo-300/20 blur-2xl rounded-full" />
+          <div className="relative bg-white rounded-2xl border border-gray-200/80 shadow-2xl shadow-indigo-900/8 overflow-hidden">
+            {/* Window chrome */}
+            <div className="flex items-center gap-1.5 px-4 py-3 bg-gray-50 border-b border-gray-100">
+              <div className="w-3 h-3 rounded-full bg-red-400/60" />
+              <div className="w-3 h-3 rounded-full bg-amber-400/60" />
+              <div className="w-3 h-3 rounded-full bg-emerald-400/60" />
+              <div className="ml-3 flex-1 bg-white rounded-md px-3 py-1 text-xs text-gray-400 font-mono border border-gray-200">
+                app.hireoo.in/dashboard/job-matches
+              </div>
             </div>
-            <div className="flex items-center gap-x-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              <span>Gmail OAuth secure</span>
-            </div>
-            <div className="flex items-center gap-x-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              <span>GDPR compliant</span>
+            {/* Content */}
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="text-gray-900 font-semibold text-sm">Today&apos;s Job Matches</div>
+                  <div className="text-gray-400 text-xs mt-0.5">42 fresh opportunities found for you</div>
+                </div>
+                <button className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-500 text-white text-xs font-semibold shadow-sm">
+                  <Zap className="h-3.5 w-3.5" />
+                  Apply to all
+                </button>
+              </div>
+              <div className="space-y-2">
+                {JOB_FEED.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group cursor-pointer">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                        <Briefcase className="h-3.5 w-3.5 text-indigo-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-gray-900 text-xs font-semibold truncate leading-tight">{item.role}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-gray-500 text-[11px] font-medium">{item.company}</span>
+                          <span className="text-gray-300 text-[11px]">·</span>
+                          <span className="text-gray-400 text-[11px]">{item.location}</span>
+                          <span className="px-1.5 py-0.5 rounded-md bg-white border border-gray-200 text-gray-400 text-[9px] font-semibold leading-none">{item.tag}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <span className="hidden sm:flex items-center gap-1 text-gray-400 text-[11px]">
+                        <Mail className="h-2.5 w-2.5" />
+                        {item.email}
+                      </span>
+                      <span className="hidden sm:block text-gray-300 text-[11px]">{item.time}</span>
+                      <button className="px-2.5 py-1.5 rounded-lg bg-indigo-500 text-white text-[10px] font-bold sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-center text-xs text-gray-400 py-1">
+                + 38 more matches — <span className="text-indigo-500 font-medium cursor-pointer">view all</span>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Stats or preview image area */}
-        <div className="mt-16 flow-root sm:mt-24">
-          <div className="relative -m-2 rounded-xl bg-gray-900/5 p-2 ring-1 ring-inset ring-gray-900/10 lg:-m-4 lg:rounded-2xl lg:p-4">
-            <div className="rounded-md bg-white shadow-2xl ring-1 ring-gray-900/10 overflow-hidden">
-              <Image
-                src="/dashboard-preview.png"
-                alt="Hireoo Dashboard Preview"
-                width={2400}
-                height={1600}
-                className="w-full h-auto"
-                priority
-              />
-            </div>
+      {/* Stats strip */}
+      <div className="relative mt-10 border-t border-gray-100 bg-gray-50/60">
+        <div className="max-w-5xl mx-auto px-6 lg:px-8 py-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { value: "500+", label: "Fresh jobs daily", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+              { value: "94%", label: "Email open rate", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+              { value: "3x", label: "More interviews", icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" },
+              { value: "< 1 min", label: "Apply to 10 jobs", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+            ].map((stat) => (
+              <div key={stat.label} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white border border-gray-200">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                    <path d={stat.icon} />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-gray-900 leading-none">{stat.value}</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">{stat.label}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

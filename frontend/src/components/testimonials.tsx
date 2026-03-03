@@ -1,131 +1,119 @@
-import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Star } from "lucide-react"
-
 const testimonials = [
   {
-    name: "Sarah Chen",
-    role: "Senior Software Engineer",
-    company: "Google",
-    image: "/globe.svg",
-    content: "Hireoo completely transformed my job search. I went from applying to 2-3 jobs a week to 50+ personalized applications. Landed my dream role at Google within 3 months!",
-    rating: 5
+    name: "Rahul Mehta",
+    role: "Frontend Developer",
+    company: "Razorpay",
+    initials: "RM",
+    bg: "bg-blue-500",
+    content:
+      "I used to spend 2 hours a day just searching and applying. With Hireoo I spend 5 minutes reviewing matches and click apply. Got 8 interview calls in my first week.",
   },
   {
-    name: "Marcus Rodriguez",
+    name: "Priya Nair",
     role: "Product Manager",
-    company: "Stripe",
-    image: "/globe.svg",
-    content: "The AI matching is incredible. It found opportunities I never would have discovered manually. The cold emails are professional and actually get responses.",
-    rating: 5
+    company: "Zepto",
+    initials: "PN",
+    bg: "bg-violet-500",
+    content:
+      "The quality of matches is genuinely impressive. It's not blasting your resume everywhere — it finds roles that actually fit. Landed my current job in 3 weeks.",
   },
   {
-    name: "Emily Watson",
+    name: "Arjun Sharma",
+    role: "Backend Engineer",
+    company: "CRED",
+    initials: "AS",
+    bg: "bg-emerald-500",
+    content:
+      "The emails it sends on my behalf are better written than what I'd draft myself. Professional, concise, and they actually get replies. Highly recommend.",
+  },
+  {
+    name: "Sneha Kapoor",
     role: "UX Designer",
-    company: "Airbnb",
-    image: "/globe.svg",
-    content: "As a busy professional, I don't have time for manual job searching. Hireoo automates everything while maintaining a personal touch. Highly recommend!",
-    rating: 5
+    company: "Groww",
+    initials: "SK",
+    bg: "bg-rose-500",
+    content:
+      "I'd been job hunting for 2 months with little success. Hireoo surfaced opportunities I'd never have found manually. Got hired in under a month.",
   },
   {
-    name: "David Kim",
-    role: "Data Scientist",
-    company: "Netflix",
-    image: "/globe.svg",
-    content: "The Chrome extension makes capturing job opportunities from professional networks effortless. Combined with the AI email generation, it's like having a personal recruiter working 24/7.",
-    rating: 5
-  },
-  {
-    name: "Lisa Thompson",
-    role: "Marketing Director",
-    company: "Spotify",
-    image: "/globe.svg",
-    content: "I was skeptical about automation, but Hireoo's approach is smart and ethical. The results speak for themselves - 300% increase in interview requests.",
-    rating: 5
-  },
-  {
-    name: "Alex Johnson",
+    name: "Vikram Tiwari",
     role: "DevOps Engineer",
-    company: "Amazon",
-    image: "/globe.svg",
-    content: "Privacy-focused and secure. I love that my Gmail stays private with OAuth. The analytics help me understand what's working in my job search.",
-    rating: 5
-  }
+    company: "PhonePe",
+    initials: "VT",
+    bg: "bg-amber-500",
+    content:
+      "Set up in 5 minutes. By the next morning I had 20 matched jobs waiting. Applied to 15 of them with one click. This is genuinely how job searching should work.",
+  },
+  {
+    name: "Ananya Bose",
+    role: "Data Scientist",
+    company: "Meesho",
+    initials: "AB",
+    bg: "bg-indigo-500",
+    content:
+      "The auto-apply to batches is a game changer. I pick my top 10 matches every morning and apply to all of them before my coffee is done.",
+  },
 ]
 
 export function Testimonials() {
   return (
-    <div className="py-16 sm:py-20">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-            Loved by job seekers worldwide
+    <section className="bg-white py-24 sm:py-28 border-t border-gray-100">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        {/* Header */}
+        <div className="max-w-2xl mb-14">
+          <span className="inline-block px-3 py-1 rounded-full bg-gray-100 text-gray-500 text-xs font-medium mb-4">
+            Testimonials
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight leading-tight">
+            People landing jobs{" "}
+            <span className="text-gray-400">without the grind.</span>
           </h2>
-          <p className="mt-6 text-lg leading-8 text-gray-600">
-            Join thousands of professionals who have transformed their job search with Hireoo.
-          </p>
         </div>
 
-        <div className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-8 lg:mx-0 lg:max-w-none lg:grid-cols-3">
-          {testimonials.map((testimonial, index) => (
-            <Card key={index} className="relative">
-              <CardContent className="p-6">
-                {/* Rating */}
-                <div className="flex mb-4">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                  ))}
+        {/* Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {testimonials.map((t, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 hover:border-gray-200 hover:shadow-md transition-all duration-300 bg-white"
+            >
+              {/* Quote marks */}
+              <svg className="h-5 w-5 text-gray-200" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+              </svg>
+              <p className="text-gray-600 text-sm leading-relaxed flex-1">
+                {t.content}
+              </p>
+              <div className="flex items-center gap-3 pt-2 border-t border-gray-50">
+                <div className={`w-9 h-9 rounded-full ${t.bg} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                  {t.initials}
                 </div>
-
-                {/* Content */}
-                <blockquote className="text-gray-900 text-sm leading-relaxed mb-6">
-                  "{testimonial.content}"
-                </blockquote>
-
-                {/* Author */}
-                <div className="flex items-center">
-                  <Avatar className="h-10 w-10 mr-4">
-                    <AvatarImage src={testimonial.image} alt={testimonial.name} />
-                    <AvatarFallback>
-                      {testimonial.name.split(' ').map(n => n[0]).join('')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <div className="font-semibold text-gray-900 text-sm">
-                      {testimonial.name}
-                    </div>
-                    <div className="text-gray-600 text-xs">
-                      {testimonial.role} at {testimonial.company}
-                    </div>
+                <div>
+                  <div className="text-gray-900 text-sm font-semibold">{t.name}</div>
+                  <div className="text-gray-400 text-xs">
+                    {t.role} · {t.company}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
 
-        {/* Stats */}
-        <div className="mt-16 bg-gray-50 rounded-2xl p-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            <div>
-              <div className="text-3xl font-bold text-gray-900">10,000+</div>
-              <div className="text-sm text-gray-600 mt-1">Active Users</div>
+        {/* Stats row */}
+        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden">
+          {[
+            { value: "12,000+", label: "Active users" },
+            { value: "850K+", label: "Applications sent" },
+            { value: "3.4×", label: "More callbacks" },
+            { value: "< 48h", label: "Avg. first reply" },
+          ].map((stat) => (
+            <div key={stat.label} className="px-8 py-8 text-center bg-white hover:bg-gray-50/60 transition-colors">
+              <div className="text-3xl font-bold text-gray-900 tracking-tight">{stat.value}</div>
+              <div className="text-sm text-gray-400 mt-1.5">{stat.label}</div>
             </div>
-            <div>
-              <div className="text-3xl font-bold text-gray-900">500K+</div>
-              <div className="text-sm text-gray-600 mt-1">Jobs Applied</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-gray-900">85%</div>
-              <div className="text-sm text-gray-600 mt-1">Success Rate</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-gray-900">24/7</div>
-              <div className="text-sm text-gray-600 mt-1">AI Automation</div>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

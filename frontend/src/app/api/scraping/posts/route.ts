@@ -160,9 +160,12 @@ export async function POST(request: NextRequest) {
         if (result.success) {
           successCount++
           console.log(`[API] Successfully stored post: ${result.postId}`)
+        } else if (result.message === 'Post already scraped by this user') {
+          // Already in ScrapedPostMatch for this user — counts as a duplicate, not an error
+          console.log(`[API] Post already matched for this user (skip): ${result.postId}`)
         } else {
           errorCount++
-          console.log(`[API] Post already exists or failed: ${result.message}`)
+          console.log(`[API] Post failed: ${result.message}`)
         }
 
         results.push(result)

@@ -1,7 +1,4 @@
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Check, Star } from "lucide-react"
+import { Check, ArrowRight } from "lucide-react"
 import Link from "next/link"
 
 const plans = [
@@ -9,152 +6,140 @@ const plans = [
     name: "Free",
     price: "₹0",
     period: "forever",
-    description: "Perfect for trying out our platform",
+    tagline: "Get started — no card needed.",
     features: [
       "10 matched jobs per day",
-      "Chrome extension access",
-      "Basic AI matching",
-      "Email templates",
-      "Community support"
+      "One-click apply via Gmail",
+      "Recruiter contact lookup",
+      "Basic profile matching",
+      "Community support",
     ],
-    limitations: [
-      "Limited to 10 jobs/day",
-      "Basic analytics only"
-    ],
-    cta: "Get Started Free",
-    ctaLink: "/signup",
-    popular: false
+    cta: "Start free",
+    href: "/signup",
+    highlight: false,
   },
   {
-    name: "Premium Basic",
+    name: "Premium",
     price: "₹149",
-    period: "per month",
-    description: "For serious job seekers",
+    period: "/mo",
+    tagline: "For active job seekers.",
     features: [
       "25 matched jobs per day",
       "Advanced AI matching",
-      "Custom email sequences",
+      "Custom email templates",
+      "Bulk auto-apply (10 at once)",
+      "Reply & thread tracking",
       "Priority support",
-      "Advanced analytics",
-      "Resume optimization",
-      "Interview tracking"
+      "Resume tips",
     ],
-    limitations: [],
-    cta: "Start Premium Basic",
-    ctaLink: "/signup?plan=premium_basic",
-    popular: true
+    cta: "Start Premium",
+    href: "/signup?plan=premium_basic",
+    highlight: true,
+    badge: "Most popular",
   },
   {
-    name: "Premium Pro",
+    name: "Pro",
     price: "₹249",
-    period: "per month",
-    description: "For power users",
+    period: "/mo",
+    tagline: "For power users going all-in.",
     features: [
       "50 matched jobs per day",
-      "Everything in Premium Basic",
-      "Unlimited job applications",
-      "Team collaboration tools",
+      "Everything in Premium",
+      "Unlimited bulk apply",
+      "Advanced analytics",
       "API access",
       "Dedicated support",
-      "Custom integrations"
     ],
-    limitations: [],
-    cta: "Start Premium Pro",
-    ctaLink: "/signup?plan=premium_pro",
-    popular: false
-  }
+    cta: "Start Pro",
+    href: "/signup?plan=premium_pro",
+    highlight: false,
+  },
 ]
 
 export function PricingTable() {
   return (
-    <div className="py-24 sm:py-32 bg-gray-50">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-            Choose the perfect plan for your job search
+    <section className="py-16 sm:py-20 border-t border-gray-100 bg-white">
+      <div className="max-w-6xl mx-auto px-6 lg:px-8">
+        {/* Header */}
+        <div className="text-center mb-12">
+
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight leading-tight">
+            Simple pricing.
+            <span className="text-gray-300"> No surprises.</span>
           </h2>
-          <p className="mt-6 text-lg leading-8 text-gray-600">
-            Start free and upgrade as you grow. No hidden fees, no long-term contracts.
+          <p className="mt-3 text-gray-500">
+            Start free. Upgrade when you&apos;re ready. Cancel anytime.
           </p>
         </div>
 
-        <div className="mx-auto mt-16 grid max-w-lg grid-cols-1 gap-y-6 sm:mt-20 lg:mx-0 lg:max-w-none lg:grid-cols-3 lg:gap-x-8">
-          {plans.map((plan, index) => (
-            <Card
+        {/* Plans */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start max-w-5xl mx-auto">
+          {plans.map((plan) => (
+            <div
               key={plan.name}
-              className={`relative flex flex-col ${plan.popular
-                  ? "border-blue-600 shadow-xl scale-105"
-                  : "border-gray-200"
-                }`}
+              className={`relative flex flex-col rounded-2xl border p-7 transition-all duration-200 ${
+                plan.highlight
+                  ? "bg-indigo-500 border-indigo-500 shadow-2xl shadow-indigo-200 lg:scale-[1.03] z-10"
+                  : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-lg"
+              }`}
             >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-blue-600 hover:bg-blue-700">
-                    <Star className="w-3 h-3 mr-1" />
-                    Most Popular
-                  </Badge>
+              {plan.badge && (
+                <div className="absolute -top-3 left-7">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full bg-white text-indigo-500 text-[11px] font-bold border border-indigo-100 shadow-sm">
+                    {plan.badge}
+                  </span>
                 </div>
               )}
 
-              <CardHeader className="text-center pb-8">
-                <CardTitle className="text-xl font-semibold text-gray-900">
+              <div className="mb-5">
+                <div className={`text-xs font-bold uppercase tracking-widest mb-3 ${plan.highlight ? "text-indigo-200" : "text-gray-400"}`}>
                   {plan.name}
-                </CardTitle>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold text-gray-900">
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-4xl font-bold tracking-tight ${plan.highlight ? "text-white" : "text-gray-900"}`}>
                     {plan.price}
                   </span>
-                  <span className="text-gray-600">/{plan.period}</span>
+                  <span className={`text-sm font-medium ${plan.highlight ? "text-indigo-200" : "text-gray-400"}`}>
+                    {plan.period}
+                  </span>
                 </div>
-                <p className="mt-4 text-sm text-gray-600">
-                  {plan.description}
+                <p className={`mt-1.5 text-sm ${plan.highlight ? "text-indigo-200" : "text-gray-500"}`}>
+                  {plan.tagline}
                 </p>
-              </CardHeader>
+              </div>
 
-              <CardContent className="flex-1">
-                <ul className="space-y-3">
-                  {plan.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-start">
-                      <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5 mr-3" />
-                      <span className="text-sm text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                  {plan.limitations.map((limitation, limitIndex) => (
-                    <li key={limitIndex} className="flex items-start">
-                      <span className="text-sm text-gray-400 line-through">
-                        {limitation}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+              <div className={`h-px mb-5 ${plan.highlight ? "bg-indigo-400/50" : "bg-gray-100"}`} />
 
-                <div className="mt-8">
-                  <Link href={plan.ctaLink}>
-                    <Button
-                      className={`w-full ${plan.popular
-                          ? "bg-blue-600 hover:bg-blue-700"
-                          : "bg-gray-900 hover:bg-gray-800"
-                        }`}
-                      size="lg"
-                    >
-                      {plan.cta}
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+              <ul className="flex-1 space-y-3 mb-7">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2.5">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${plan.highlight ? "bg-white/20" : "bg-gray-100"}`}>
+                      <Check className={`h-3 w-3 ${plan.highlight ? "text-white" : "text-gray-900"}`} />
+                    </div>
+                    <span className={`text-sm leading-snug ${plan.highlight ? "text-indigo-100" : "text-gray-600"}`}>{f}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                href={plan.href}
+                className={`group flex items-center justify-center gap-2 w-full py-3 rounded-full text-sm font-semibold transition-all duration-200 ${
+                  plan.highlight
+                    ? "bg-white text-indigo-600 hover:bg-indigo-50 hover:shadow-lg"
+                    : "bg-gray-900 text-white hover:bg-gray-800 hover:shadow-lg"
+                }`}
+              >
+                {plan.cta}
+                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </div>
           ))}
         </div>
 
-        <div className="mt-16 text-center">
-          <p className="text-base text-gray-600">
-            All plans include a 14-day free trial. No credit card required.
-          </p>
-          <p className="mt-2 text-sm text-gray-500">
-            Questions about pricing? <Link href="/contact" className="text-blue-600 hover:text-blue-700">Contact us</Link>
-          </p>
-        </div>
+        <p className="mt-8 text-center text-sm text-gray-400">
+          All plans include a 14-day free trial. No credit card required.
+        </p>
       </div>
-    </div>
+    </section>
   )
 }

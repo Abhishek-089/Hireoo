@@ -117,8 +117,7 @@ export default function OnboardingPage() {
     if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1)
     } else {
-      // Onboarding complete
-      router.push("/dashboard")
+      router.push("/dashboard/job-matches?from=onboarding")
     }
   }
 

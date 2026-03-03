@@ -74,7 +74,7 @@ model GmailCredential {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
-// Job model - scraped job postings
+// Job model - scraped job postings (populated by centralized scraper + extension enrichment)
 model Job {
   id              String   @id @default(cuid())
   scraped_post_id String?  @unique
@@ -93,6 +93,7 @@ model Job {
   source_url      String?  // LinkedIn URL
   embedding       Float[]  // OpenAI embedding vector
   status          String   @default("active") // active, applied, expired
+  content_hash    String?  @unique // SHA-256 hash for deduplication (company+title+location+desc[:200])
 
   // Relations
   scraped_post    ScrapedPost? @relation(fields: [scraped_post_id], references: [id])
@@ -103,6 +104,7 @@ model Job {
   @@index([status])
   @@index([company])
   @@index([location])
+  @@index([content_hash])
 }
 
 // Job Match model - AI-powered job-user matches

@@ -1,7 +1,6 @@
 import { Hero } from "@/components/hero"
 import { FeatureGrid } from "@/components/feature-grid"
 import { PricingTable } from "@/components/pricing-table"
-import { Testimonials } from "@/components/testimonials"
 
 export default function Home() {
   const siteUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
@@ -44,7 +43,6 @@ export default function Home() {
       />
       <Hero />
       <FeatureGrid />
-      <Testimonials />
       <PricingTable />
     </div>
   )
