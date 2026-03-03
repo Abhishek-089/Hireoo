@@ -4,6 +4,10 @@ export interface AuthUser {
   email: string
   name?: string
   jwt: string
+  /** User's job skills — embedded in JWT at login time */
+  skills?: string[]
+  /** User's preferred job titles — embedded in JWT at login time */
+  preferred_job_titles?: string[]
 }
 
 export class ExtensionAuth {
@@ -46,6 +50,8 @@ export class ExtensionAuth {
         email: authData.email,
         name: authData.name,
         jwt: authData.jwt,
+        skills: authData.skills ?? [],
+        preferred_job_titles: authData.preferred_job_titles ?? [],
       }
     } catch (error) {
       console.error('Failed to get auth data:', error)
@@ -89,6 +95,8 @@ export class ExtensionAuth {
         email: payload.email,
         name: payload.name,
         jwt,
+        skills: Array.isArray(payload.skills) ? payload.skills : [],
+        preferred_job_titles: Array.isArray(payload.preferred_job_titles) ? payload.preferred_job_titles : [],
       }
 
       await this.setAuthData(user)

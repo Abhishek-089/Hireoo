@@ -44,6 +44,35 @@ export class HiddenRunner {
   private constructor() { }
 
   /**
+   * Open (or reload) the Hireoo dashboard in any existing tab, or create a new one.
+   * Called after prefill fills posts so the user can see them without a manual refresh.
+   */
+  private async openOrReloadDashboard(): Promise<void> {
+    try {
+      // Use the same base URL the extension already uses for API calls
+      const appUrl: string = (import.meta.env.VITE_APP_URL as string | undefined) || 'http://localhost:3000'
+
+      const dashboardUrl = `${appUrl}/dashboard/job-matches`
+      const pattern = `${appUrl}/dashboard*`
+
+      // Look for an existing Hireoo dashboard tab
+      const existing = await chrome.tabs.query({ url: pattern }).catch(() => [])
+      if (existing.length > 0) {
+        // Reload the first matching tab so the server-rendered page shows fresh data
+        chrome.tabs.reload(existing[0].id!).catch(() => { })
+        chrome.tabs.update(existing[0].id!, { active: true }).catch(() => { })
+        console.log('[HiddenRunner] Reloaded existing dashboard tab')
+      } else {
+        // No dashboard tab open — open one now
+        chrome.tabs.create({ url: dashboardUrl, active: false }).catch(() => { })
+        console.log('[HiddenRunner] Opened new dashboard tab')
+      }
+    } catch (e) {
+      console.warn('[HiddenRunner] Could not open/reload dashboard:', e)
+    }
+  }
+
+  /**
    * Build LinkedIn search results URL with keywords
    */
   private buildSearchUrl(keywords: string): string {
@@ -52,29 +81,54 @@ export class HiddenRunner {
   }
 
   /**
-   * Fetch scraping keywords from backend API
+   * Compute search keywords for the current user.
+   *
+   * Strategy (in order of priority):
+   * 1. Use skills / preferred_job_titles embedded directly in the JWT payload.
+   *    These are written at login time by /api/extension/token and are 100%
+   *    guaranteed to belong to the correct user — no extra API call required.
+   * 2. Fall back to the /api/extension/preferences endpoint if the JWT is old
+   *    and doesn't carry the new fields yet.
    */
-  private async fetchSearchKeywords(): Promise<string> {
-    try {
-      console.log('[HiddenRunner] 📥 Fetching dynamic search keywords...')
-      const response = await ExtensionAuth.authenticatedRequest('/api/extension/preferences')
+  private async fetchSearchKeywords(authData?: import('../utils/auth').AuthUser | null): Promise<string> {
+    console.log('[HiddenRunner] 📥 Fetching dynamic search keywords...')
 
-      if (!response.ok) {
-        console.warn('[HiddenRunner] ⚠️ Failed to fetch preferences, using default keywords')
-        return this.searchKeywords
+    // ── Priority 1: keywords embedded in the JWT ──────────────────────────────
+    const skills = authData?.skills ?? []
+    const titles = authData?.preferred_job_titles ?? []
+    if (skills.length > 0 || titles.length > 0) {
+      const keywords = [...titles, ...skills].slice(0, 5).join(', ')
+      if (keywords.trim()) {
+        console.log(`[HiddenRunner] ✅ Keywords from JWT (no API call needed): "${keywords}"`)
+        return keywords
       }
-
-      const data = await response.json()
-      if (data.keywords && typeof data.keywords === 'string') {
-        console.log(`[HiddenRunner] ✅ Fetched keywords: "${data.keywords}"`)
-        return data.keywords
-      }
-
-      return this.searchKeywords
-    } catch (error) {
-      console.error('[HiddenRunner] ❌ Error fetching keywords:', error)
-      return this.searchKeywords
     }
+
+    // ── Priority 2: fetch from preferences API (legacy / fallback) ────────────
+    console.log('[HiddenRunner] ℹ️ No keywords in JWT, falling back to preferences API...')
+    try {
+      const response = authData?.jwt
+        ? await fetch(
+            `${(import.meta.env.VITE_APP_URL as string | undefined) || 'http://localhost:3000'}/api/extension/preferences`,
+            { headers: { Authorization: `Bearer ${authData.jwt}` } }
+          )
+        : await ExtensionAuth.authenticatedRequest('/api/extension/preferences')
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.keywords && typeof data.keywords === 'string') {
+          console.log(`[HiddenRunner] ✅ Keywords from API: "${data.keywords}"`)
+          return data.keywords
+        }
+      } else {
+        console.warn('[HiddenRunner] ⚠️ Preferences API returned', response.status)
+      }
+    } catch (error) {
+      console.warn('[HiddenRunner] ⚠️ Preferences API unreachable:', error)
+    }
+
+    console.warn('[HiddenRunner] ⚠️ Using default keywords as last resort')
+    return this.searchKeywords
   }
 
   static getInstance(): HiddenRunner {
@@ -93,19 +147,7 @@ export class HiddenRunner {
     try {
       console.log('[HiddenRunner] 🚀 Starting hidden LinkedIn runner...')
 
-      // Fetch dynamic keywords
-      this.searchKeywords = await this.fetchSearchKeywords()
-
-      console.log('[HiddenRunner] 📋 Configuration:', {
-        keywords: this.searchKeywords,
-        scrollInterval: `${this.SCROLL_INTERVAL_MIN / 1000}s - ${this.SCROLL_INTERVAL_MAX / 1000}s`,
-        scrapeInterval: `${this.SCRAPE_INTERVAL / 1000}s`,
-        maxRunTime: `${this.MAX_RUN_TIME / 1000 / 60} minutes`,
-        targetQualifiedPosts: this.TARGET_QUALIFIED_POSTS,
-        maxScrapeAttempts: this.MAX_SCRAPE_ATTEMPTS
-      })
-
-      // Check if user is authenticated (directly use ExtensionAuth instead of message)
+      // ── Auth check MUST come first so keyword fetch uses the correct user's JWT ──
       console.log('[HiddenRunner] 🔐 Checking authentication...')
       const authData = await ExtensionAuth.getAuthData()
       if (!authData) {
@@ -120,35 +162,114 @@ export class HiddenRunner {
         name: authData.name || 'N/A'
       })
 
-      // Check daily limit before starting
-      console.log('[HiddenRunner] 📊 Checking daily limit status...')
+      // Derive keywords from the user's JWT-embedded preferences.
+      // This never makes a production API call so there is zero risk of getting
+      // another user's keywords back via a stale session cookie on the server.
+      this.searchKeywords = await this.fetchSearchKeywords(authData)
+
+      console.log('[HiddenRunner] 📋 Configuration:', {
+        keywords: this.searchKeywords,
+        scrollInterval: `${this.SCROLL_INTERVAL_MIN / 1000}s - ${this.SCROLL_INTERVAL_MAX / 1000}s`,
+        scrapeInterval: `${this.SCRAPE_INTERVAL / 1000}s`,
+        maxRunTime: `${this.MAX_RUN_TIME / 1000 / 60} minutes`,
+        targetQualifiedPosts: this.TARGET_QUALIFIED_POSTS,
+        maxScrapeAttempts: this.MAX_SCRAPE_ATTEMPTS
+      })
+
+      // ── Step 1: Hard daily-limit gate — stop before opening LinkedIn ─────────
+      // This check is intentionally separate from the prefill so it works even
+      // when /api/scraping/prefill has not been deployed yet to production.
+      console.log('[HiddenRunner] 🔢 Checking daily limit...')
       try {
         const limitResponse = await ExtensionAuth.authenticatedRequest('/api/scraping/daily-limit')
         if (limitResponse.ok) {
-          const limitData = await limitResponse.json()
-          if (limitData.data && !limitData.data.canScrape) {
-            console.log('[HiddenRunner] 🛑 Daily limit already reached!')
-            console.log('[HiddenRunner] 📊 Limit status:', limitData.data)
+          const limitJson = await limitResponse.json()
+          // The endpoint wraps data under a "data" key
+          const limitData = limitJson.data ?? limitJson
+          console.log('[HiddenRunner] 📊 Daily limit:', limitData)
 
-            // Show notification
+          if (limitData.canScrape === false) {
+            console.log(`[HiddenRunner] 🛑 Daily limit already reached (${limitData.current}/${limitData.limit}) — stopping`)
+            await this.openOrReloadDashboard()
             try {
-              await chrome.notifications.create({
+              await chrome.notifications?.create({
                 type: 'basic',
-                iconUrl: '/icon.png',
-                title: 'Daily Limit Already Reached',
-                message: `You've already reached your daily limit of ${limitData.data.limit} matched jobs. Resets at ${new Date(limitData.data.resetAt).toLocaleTimeString()}.`,
+                iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                title: 'Daily limit reached',
+                message: `You already have ${limitData.current} matching jobs today. Opening your dashboard now.`,
                 priority: 2
               })
             } catch (notifError) {
               console.warn('[HiddenRunner] Failed to show notification:', notifError)
             }
-
-            return { success: false, message: `Daily limit already reached (${limitData.data.current}/${limitData.data.limit}). Resets at ${new Date(limitData.data.resetAt).toLocaleTimeString()}.` }
+            return {
+              success: true,
+              message: `Daily limit reached — ${limitData.current}/${limitData.limit} matching jobs already in your dashboard.`,
+            }
           }
-          console.log('[HiddenRunner] ✅ Daily limit OK:', `${limitData.data.current}/${limitData.data.limit}`)
+        } else {
+          console.warn('[HiddenRunner] ⚠️ Daily limit check returned', limitResponse.status, '— continuing anyway')
         }
       } catch (limitError) {
-        console.warn('[HiddenRunner] ⚠️ Failed to check daily limit, continuing anyway:', limitError)
+        console.warn('[HiddenRunner] ⚠️ Could not check daily limit (continuing):', limitError)
+      }
+
+      // ── Step 2: Fill from global DB pool before touching LinkedIn ──────────
+      // This reuses posts other users have already scraped.  The API returns
+      // how many were found so we can calculate how many LinkedIn scrapes we
+      // still need.
+      console.log('[HiddenRunner] 🗄️  Checking global post pool for existing matches...')
+      try {
+        const prefillResponse = await ExtensionAuth.authenticatedRequest('/api/scraping/prefill', {
+          method: 'POST',
+        })
+        if (prefillResponse.ok) {
+          const prefillData = await prefillResponse.json()
+          console.log('[HiddenRunner] 📦 Pool prefill result:', prefillData)
+
+          if (prefillData.alreadyAtLimit) {
+            console.log('[HiddenRunner] 🛑 Daily limit already reached after pool fill!')
+            // Open / reload the dashboard so the user can see their posts immediately
+            await this.openOrReloadDashboard()
+            try {
+              await chrome.notifications?.create({
+                type: 'basic',
+                iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                title: 'Your jobs are ready!',
+                message: `${prefillData.current} matching jobs loaded from our database. Opening your dashboard now.`,
+                priority: 2
+              })
+            } catch (notifError) {
+              console.warn('[HiddenRunner] Failed to show notification:', notifError)
+            }
+            return {
+              success: true,
+              message: `Daily limit reached — ${prefillData.current} matching jobs already in your dashboard.`,
+            }
+          }
+
+          if (prefillData.qualified > 0) {
+            console.log(`[HiddenRunner] ✅ Got ${prefillData.qualified} posts from DB pool — only need ${prefillData.remaining} more from LinkedIn`)
+            // Seed qualifiedPosts so the extension stops scraping earlier
+            this.qualifiedPosts = prefillData.qualified
+            // Reload dashboard so pool-filled posts appear without a manual refresh
+            await this.openOrReloadDashboard()
+          }
+
+          // If nothing left to scrape, skip LinkedIn entirely
+          if (prefillData.remaining === 0) {
+            console.log('[HiddenRunner] 🎯 Pool filled quota entirely — skipping LinkedIn scrape')
+            await this.openOrReloadDashboard()
+            return {
+              success: true,
+              message: `All ${prefillData.qualified} job matches loaded from the database. No scraping needed.`,
+            }
+          }
+        } else {
+          console.warn('[HiddenRunner] ⚠️ Prefill returned', prefillResponse.status, '— skipping pool fill (endpoint may not be deployed yet)')
+        }
+      } catch (prefillError) {
+        console.warn('[HiddenRunner] ⚠️ Pool prefill failed, continuing with full LinkedIn scrape:', prefillError)
       }
 
       // Build search URL with keywords
@@ -178,7 +299,8 @@ export class HiddenRunner {
       this.isRunning = true
       this.startTime = Date.now()
       this.lastActivity = Date.now()
-      this.qualifiedPosts = 0
+      // qualifiedPosts may already be > 0 if fillFromGlobalPool found matches above;
+      // don't reset it here or we'd re-scrape posts we already have.
       this.totalPostsScraped = 0
 
       // Broadcast status change immediately
@@ -697,9 +819,9 @@ export class HiddenRunner {
 
         // Notify the user via Chrome notification
         try {
-          await chrome.notifications.create({
+          await chrome.notifications?.create({
             type: 'basic',
-            iconUrl: '/icon.png',
+            iconUrl: chrome.runtime.getURL('icons/icon48.png'),
             title: 'Hireoo: Sign In Required',
             message: 'Your session expired. Please open the Hireoo website, sign in, and reload the extension.',
             priority: 2
@@ -741,9 +863,9 @@ export class HiddenRunner {
 
           // Show notification to user
           try {
-            await chrome.notifications.create({
+            await chrome.notifications?.create({
               type: 'basic',
-              iconUrl: '/icon.png',
+              iconUrl: chrome.runtime.getURL('icons/icon48.png'),
               title: 'Daily Job Limit Reached',
               message: `You've reached your daily limit of ${data.dailyLimit.limit} matched jobs. Resets at ${new Date(data.dailyLimit.resetAt).toLocaleTimeString()}.`,
               priority: 2
@@ -772,9 +894,9 @@ export class HiddenRunner {
 
           // Show success notification
           try {
-            await chrome.notifications.create({
+            await chrome.notifications?.create({
               type: 'basic',
-              iconUrl: '/icon.png',
+              iconUrl: chrome.runtime.getURL('icons/icon48.png'),
               title: 'Job Scraping Complete!',
               message: `Successfully found ${this.qualifiedPosts} qualified job posts matching your preferences.`,
               priority: 2
@@ -794,9 +916,9 @@ export class HiddenRunner {
 
           // Show notification
           try {
-            await chrome.notifications.create({
+            await chrome.notifications?.create({
               type: 'basic',
-              iconUrl: '/icon.png',
+              iconUrl: chrome.runtime.getURL('icons/icon48.png'),
               title: 'Scraping Stopped',
               message: `Found ${this.qualifiedPosts} qualified posts after scraping ${this.totalPostsScraped} posts. Try adjusting your preferences for better matches.`,
               priority: 2
