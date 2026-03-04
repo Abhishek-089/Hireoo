@@ -1,9 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Mail, Download, UserCog, Linkedin, CheckCircle2, Circle, Play } from "lucide-react"
+import { Mail, UserCog, CheckCircle2, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ExtensionInstallButton } from "@/components/extension/ExtensionInstallButton"
 import { EXTENSION_CONFIG } from "@/config/extension"
@@ -17,157 +15,117 @@ interface QuickActionsProps {
   } | null
 }
 
+const steps = [
+  {
+    id: "gmail",
+    title: "Connect Gmail",
+    description: "Send applications directly from your inbox",
+    icon: Mail,
+    href: "/dashboard/email-settings",
+    completedKey: "gmail_connected" as const,
+    isExtension: false,
+  },
+  {
+    id: "profile",
+    title: "Complete Profile",
+    description: "Add your resume and job preferences",
+    icon: UserCog,
+    href: "/onboarding",
+    completedKey: "resume_uploaded" as const,
+    isExtension: false,
+  },
+]
+
 export function QuickActions({ status }: QuickActionsProps) {
-  const checklist = [
-    {
-      title: "Gmail Account",
-      description: "Connect your Gmail account",
-      icon: Mail,
-      href: "/dashboard/email-settings",
-      isCompleted: status?.gmail_connected ?? false,
-      buttonText: "Connect Now",
-      completedText: "Connected",
-      isExtension: false,
-    },
-    {
-      title: "Extension Installed",
-      description: "Install our chrome extension",
-      icon: Download,
-      href: EXTENSION_CONFIG.storeUrl,
-      isCompleted: status?.extension_installed ?? false,
-      buttonText: "Install Now",
-      completedText: "Installed",
-      isExtension: true,
-    },
-    {
-      title: "Professional Profile",
-      description: "Connect your professional network",
-      icon: Linkedin,
-      href: "#",
-      isCompleted: status?.linkedin_connected ?? false,
-      buttonText: "Connect Now",
-      completedText: "Connected",
-      isExtension: false,
-    },
-    {
-      title: "Update Profile",
-      description: "Complete your user profile",
-      icon: UserCog,
-      href: "/onboarding",
-      isCompleted: status?.resume_uploaded ?? false,
-      buttonText: "Update Now",
-      completedText: "Updated",
-      isExtension: false,
-    },
-  ]
+  const completedCount = steps.filter((s) => status?.[s.completedKey]).length
+  const totalSteps = steps.length
+  const allDone = completedCount === totalSteps
 
-  const handleExtensionClick = () => {
-    window.open(EXTENSION_CONFIG.storeUrl, '_blank', 'noopener,noreferrer')
-  }
-
-  const handleStartAutomation = async () => {
-    if (!status?.extension_installed) {
-      // If extension not installed, redirect to store
-      window.open(EXTENSION_CONFIG.storeUrl, '_blank', 'noopener,noreferrer')
-      return
-    }
-
-    try {
-      // Check if chrome runtime is available (only in browser extension context)
-      const chromeRuntime = typeof chrome !== 'undefined' ? chrome.runtime : undefined
-      if (chromeRuntime && chromeRuntime.sendMessage) {
-        // Send message to extension
-        chromeRuntime.sendMessage(EXTENSION_CONFIG.id, {
-          type: 'START_HIDDEN_RUNNER',
-          source: 'DASHBOARD'
-        }, (response: any) => {
-          // Check for chrome runtime errors with proper type guard
-          const lastError = typeof chrome !== 'undefined' && chrome.runtime?.lastError ? chrome.runtime.lastError : null
-          if (lastError) {
-            console.error('Failed to trigger automation:', lastError)
-            alert(`Failed to connect to extension: ${lastError.message || 'Unknown error'}. \n\nPlease make sure the extension is installed and reloaded.`)
-          } else {
-            console.log('Automation triggered:', response)
-            if (response && response.success === false) {
-              alert(`Extension error: ${response.message}`)
-            } else {
-              alert('Automation signal sent. Please check the extension icon.')
-            }
-          }
-        })
-      } else {
-        console.warn('Chrome runtime not found')
-        alert('Chrome extension API not found. Please make sure you are using Chrome.')
-      }
-    } catch (error) {
-      console.error('Failed to start automation:', error)
-      alert('Failed to start automation.')
-    }
-  }
+  if (allDone) return null
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Dashboard Checklist</h2>
+    <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-white overflow-hidden">
+      {/* Header */}
+      <div className="px-5 pt-5 pb-4 flex items-center justify-between border-b border-indigo-100/60">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Get started</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {completedCount} of {totalSteps} steps complete
+          </p>
+        </div>
+        {/* Step counter pill */}
+        <div className="flex items-center gap-1.5">
+          {steps.map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "h-1.5 w-6 rounded-full transition-all",
+                i < completedCount ? "bg-indigo-500" : "bg-indigo-100"
+              )}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {checklist.map((item) => (
-          <Card key={item.title} className={cn(
-            "hover:shadow-md transition-all border-2",
-            item.isCompleted ? "border-green-100 bg-green-50/10" : "border-gray-100"
-          )}>
-            <CardContent className="p-6 flex flex-col items-start gap-4">
-              <div className="flex justify-between w-full items-start">
-                <div className={cn(
-                  "p-2 rounded-lg",
-                  item.isCompleted ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"
-                )}>
-                  <item.icon className="h-5 w-5" />
-                </div>
-                {item.isCompleted ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+      {/* Steps */}
+      <div className="divide-y divide-indigo-100/60">
+        {steps.map((step) => {
+          const done = status?.[step.completedKey] ?? false
+
+          return (
+            <div
+              key={step.id}
+              className={cn(
+                "flex items-center gap-4 px-5 py-4",
+                done && "opacity-60"
+              )}
+            >
+              {/* Status circle */}
+              <div className={cn(
+                "shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all",
+                done
+                  ? "bg-emerald-500 border-emerald-500"
+                  : "bg-white border-indigo-200"
+              )}>
+                {done ? (
+                  <CheckCircle2 className="h-4 w-4 text-white" />
                 ) : (
-                  <Circle className="h-5 w-5 text-gray-300" />
+                  <step.icon className="h-4 w-4 text-indigo-400" />
                 )}
               </div>
 
-              <div className="space-y-1">
-                <h3 className="text-base font-semibold text-gray-900">{item.title}</h3>
-                <p className="text-sm text-gray-500 line-clamp-2">{item.description}</p>
+              {/* Text */}
+              <div className="flex-1 min-w-0">
+                <p className={cn(
+                  "text-sm font-semibold",
+                  done ? "line-through text-gray-400" : "text-gray-900"
+                )}>
+                  {step.title}
+                </p>
+                <p className="text-xs text-gray-400 truncate">{step.description}</p>
               </div>
 
-              {item.isExtension ? (
-                <div className="w-full mt-auto">
+              {/* Action */}
+              {!done && (
+                step.isExtension ? (
                   <ExtensionInstallButton
                     variant="outline"
                     size="sm"
-                    className="w-full border-gray-200 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                    className="shrink-0 border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs h-8 px-3"
                   />
-                </div>
-              ) : item.isCompleted ? (
-                <Button size="sm" variant="ghost" className="w-full mt-auto text-green-600 font-medium hover:bg-green-50" disabled>
-                  {item.completedText}
-                </Button>
-              ) : (item as any).isAutomation ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full border-gray-200 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                  onClick={handleStartAutomation}
-                >
-                  {item.buttonText}
-                </Button>
-              ) : (
-                <Link href={item.href} className="w-full mt-auto">
-                  <Button size="sm" variant="outline" className="w-full border-gray-200 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                    {item.buttonText}
-                  </Button>
-                </Link>
+                ) : (
+                  <Link
+                    href={step.href}
+                    className="shrink-0 flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
+                  >
+                    Set up
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                )
               )}
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

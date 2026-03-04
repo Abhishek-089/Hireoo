@@ -1,20 +1,13 @@
-
 import React from 'react'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
-import { Mail } from 'lucide-react'
+import { CheckCircle2, Clock } from 'lucide-react'
 
 interface EmailActivityItem {
   id: string
   appliedAt: string
   hrEmail: string
-  job: {
-    title: string
-    company: string
-    url: string
-  }
+  job: { title: string; company: string; url: string }
   status: string
   thread: any
 }
@@ -27,57 +20,63 @@ interface EmailListProps {
 
 export function EmailList({ items, selectedId, onSelect }: EmailListProps) {
   return (
-    <div className="flex flex-col gap-1 overflow-y-auto h-full pr-1">
-      {items.length === 0 ? (
-        <div className="text-center p-8 text-muted-foreground text-sm flex flex-col items-center gap-3">
-          <Mail className="w-10 h-10 opacity-20" />
-          <div>
-            <p className="font-medium">No applications yet</p>
-            <p className="text-xs mt-1">Your sent applications will appear here</p>
-          </div>
-        </div>
-      ) : (
-        items.map((item) => (
-          <div
+    <div className="flex flex-col divide-y divide-gray-50">
+      {items.map((item) => {
+        const isSelected = selectedId === item.id
+        const isReplied = item.status === 'replied'
+        const initials = item.job.company.slice(0, 2).toUpperCase()
+
+        return (
+          <button
             key={item.id}
             onClick={() => onSelect(item.id)}
             className={cn(
-              "flex flex-col gap-1.5 p-3 rounded-md cursor-pointer transition-all border",
-              selectedId === item.id
-                ? "bg-accent/50 border-accent shadow-sm"
-                : "bg-background border-transparent hover:bg-accent/30"
+              "w-full text-left px-4 py-3.5 transition-colors",
+              isSelected ? "bg-indigo-50" : "hover:bg-gray-50"
             )}
           >
-            <div className="flex justify-between items-start gap-2">
-              <div className="font-semibold truncate text-sm flex-1">
-                {item.job.company}
+            <div className="flex items-start gap-3">
+              {/* Avatar */}
+              <div className={cn(
+                "shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold",
+                isReplied ? "bg-emerald-100 text-emerald-700" : "bg-indigo-100 text-indigo-700"
+              )}>
+                {initials}
               </div>
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                {formatDistanceToNow(new Date(item.appliedAt), { addSuffix: true })}
-              </span>
-            </div>
 
-            <div className="text-xs text-foreground/70 truncate">
-              {item.job.title}
-            </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-1 mb-0.5">
+                  <span className={cn(
+                    "text-sm font-semibold truncate",
+                    isSelected ? "text-indigo-900" : "text-gray-900"
+                  )}>
+                    {item.job.company}
+                  </span>
+                  <span className="text-[11px] text-gray-400 shrink-0">
+                    {formatDistanceToNow(new Date(item.appliedAt), { addSuffix: true })}
+                  </span>
+                </div>
 
-            <div className="flex items-center gap-2 mt-0.5">
-              <Badge
-                variant={item.status === 'replied' ? 'default' : 'secondary'}
-                className={cn(
-                  "text-[10px] h-4 px-1.5 font-medium",
-                  item.status === 'replied' && "bg-green-100 text-green-700 border-green-200"
-                )}
-              >
-                {item.status === 'replied' ? '✓ Replied' : 'Sent'}
-              </Badge>
-              <span className="text-[11px] text-muted-foreground truncate flex-1">
-                {item.hrEmail}
-              </span>
+                <p className="text-xs text-gray-500 truncate mb-1.5">{item.job.title}</p>
+
+                <div className="flex items-center gap-1.5">
+                  {isReplied ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                      Replied
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
+                      <Clock className="h-2.5 w-2.5" />
+                      Awaiting reply
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        ))
-      )}
+          </button>
+        )
+      })}
     </div>
   )
 }

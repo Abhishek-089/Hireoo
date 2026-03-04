@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <div className="mx-auto max-w-4xl px-6 py-24">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
-          <p className="text-lg text-gray-600">Last updated: December 16, 2024</p>
+          <p className="text-lg text-gray-600">Last updated: March 4, 2026</p>
         </div>
 
         <div className="prose prose-lg max-w-none">
@@ -143,17 +143,6 @@ export default function PrivacyPage() {
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">11. Contact Us</h2>
-            <p className="text-gray-700 leading-relaxed mb-4">
-              If you have any questions about this Privacy Policy or our data practices, please contact us:
-            </p>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-gray-700"><strong>Email:</strong> privacy@hireoo.com</p>
-              <p className="text-gray-700"><strong>Address:</strong> 123 Innovation Drive, San Francisco, CA 94103</p>
-              <p className="text-gray-700"><strong>Phone:</strong> +1 (555) 123-4567</p>
-            </div>
-          </section>
         </div>
       </div>
     </div>

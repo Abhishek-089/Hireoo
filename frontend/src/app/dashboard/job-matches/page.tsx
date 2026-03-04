@@ -1,13 +1,10 @@
 import { ScrapedPosts } from "@/components/dashboard/ScrapedPosts"
 import { JobMatchesLoader } from "@/components/dashboard/JobMatchesLoader"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Briefcase } from "lucide-react"
+import { Briefcase, Send, TrendingUp, Star } from "lucide-react"
 
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { DailyLimitService } from "@/lib/daily-limit-service"
 import { ScrapedPostMatchingService } from "@/lib/scraped-post-matching"
 
 type JobMatchesPageProps = {
@@ -16,92 +13,50 @@ type JobMatchesPageProps = {
 
 async function getJobMatchStats(userId: string) {
   try {
-    // Get the start of today's daily window — same logic as ScrapedPosts so stats match the list
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { daily_limit_reset_at: true }
-    })
-    const windowStart = DailyLimitService.getDailyWindowStart(
-      (user as any)?.daily_limit_reset_at ?? null
-    )
-
-    const todayShownFilter = {
+    const allTimeShownFilter = {
       user_id: userId,
       shown_to_user: true,
-      shown_at: { gte: windowStart },
       scrapedPost: { text: { contains: '@' } },
     }
 
-    const [
-      totalMatches,
-      totalApplied,
-      avgMatchScoreResult,
-      emailStats
-    ] = await Promise.all([
-      // 1. Total visible matches today: shown, has email, not applied
+    const [totalMatches, totalApplied, avgMatchScoreResult, emailStats] = await Promise.all([
       prisma.scrapedPostMatch.count({
         where: {
-          ...todayShownFilter,
+          ...allTimeShownFilter,
           applied: false,
           scrapedPost: {
             text: { contains: '@' },
-            applications: { none: { user_id: userId } }  // use none: not NOT+some
+            applications: { none: { user_id: userId } }
           }
         }
       }),
-
-      // 2. Applied count today: shown, has email, applied via the platform
       prisma.scrapedPostMatch.count({
         where: {
-          ...todayShownFilter,
+          ...allTimeShownFilter,
           OR: [
             { applied: true },
             { scrapedPost: { applications: { some: { user_id: userId } } } }
           ]
         }
       }),
-
-      // 3. Average match score for today's shown, email-bearing posts
       prisma.scrapedPostMatch.aggregate({
-        where: todayShownFilter,
+        where: allTimeShownFilter,
         _avg: { match_score: true }
       }),
-
-      // 4. Response Rate stats (Applications vs Replies)
       Promise.all([
-        // Count total applications sent via email
         prisma.scrapedApplication.count({
-          where: {
-            user_id: userId,
-            gmail_thread_id: { not: null } // Only count if email was actually sent/tracked
-          }
+          where: { user_id: userId, gmail_thread_id: { not: null } }
         }),
-        // Count applications that have received replies
         prisma.scrapedApplication.findMany({
-          where: {
-            user_id: userId,
-            gmail_thread_id: { not: null }
-          },
-          select: {
-            gmail_thread_id: true
-          }
+          where: { user_id: userId, gmail_thread_id: { not: null } },
+          select: { gmail_thread_id: true }
         }).then(async (apps: { gmail_thread_id: string | null }[]) => {
           const threadIds = apps.map(a => a.gmail_thread_id).filter(Boolean) as string[]
-
           if (threadIds.length === 0) return 0
-
-          // Count threads that have incoming messages (replies)
-          // We check EmailLog for 'received' messages in these threads
           const replies = await prisma.emailLog.groupBy({
             by: ['thread_id'],
-            where: {
-              user_id: userId,
-              thread_id: { in: threadIds },
-              direction: 'received',
-              is_reply: true,
-            },
+            where: { user_id: userId, thread_id: { in: threadIds }, direction: 'received', is_reply: true },
           })
-
           return replies.length
         })
       ])
@@ -112,35 +67,21 @@ async function getJobMatchStats(userId: string) {
       ? Math.round((repliesReceived / applicationsSent) * 100)
       : 0
 
-    // If preference is 0-1.0 scale:
-    const normalizedMatchScore = avgMatchScoreResult._avg.match_score
-      ? (avgMatchScoreResult._avg.match_score / 100).toFixed(1)
-      : "0.0"
+    const avgScore = avgMatchScoreResult._avg.match_score
+      ? Math.round(avgMatchScoreResult._avg.match_score)
+      : 0
 
-    return {
-      totalMatches: totalMatches,
-      totalApplied,
-      responseRate,
-      avgMatchScore: normalizedMatchScore
-    }
+    return { totalMatches, totalApplied, responseRate, avgScore }
   } catch (error) {
     console.error("Error fetching job match stats:", error)
-    return {
-      totalMatches: 0,
-      totalApplied: 0,
-      responseRate: 0,
-      avgMatchScore: "0.0"
-    }
+    return { totalMatches: 0, totalApplied: 0, responseRate: 0, avgScore: 0 }
   }
 }
 
 export default async function JobMatchesPage({ searchParams }: JobMatchesPageProps) {
   const session = await getServerSession(authOptions)
-
   const userId = (session?.user as any)?.id
-  if (!userId) {
-    return <div>Please sign in to view job matches.</div>
-  }
+  if (!userId) return <div>Please sign in to view job matches.</div>
 
   const awaitedSearchParams = await searchParams
   const pageParam = awaitedSearchParams?.page
@@ -148,7 +89,6 @@ export default async function JobMatchesPage({ searchParams }: JobMatchesPagePro
   const page = pageStr ? Math.max(1, parseInt(pageStr, 10) || 1) : 1
   const fromOnboarding = awaitedSearchParams?.from === "onboarding"
 
-  // Always trigger pool matching server-side to pull in scraper posts
   try {
     await ScrapedPostMatchingService.fillFromGlobalPool(userId)
   } catch (e) {
@@ -165,63 +105,78 @@ export default async function JobMatchesPage({ searchParams }: JobMatchesPagePro
 
   const content = (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Job Matches</h1>
-          <p className="mt-2 text-gray-600">
-            AI-matched job opportunities based on your profile and preferences.
-          </p>
-        </div>
+
+      {/* Page header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Matched Jobs</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          AI-matched opportunities based on your profile and skills.
+        </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Matches</CardTitle>
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalMatches}</div>
-            <p className="text-xs text-muted-foreground">Actionable</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Applied</CardTitle>
-            <Badge variant="secondary" className="text-xs">Applied</Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalApplied}</div>
-            <p className="text-xs text-muted-foreground">Applications</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
-            <Badge variant="outline" className="text-xs">{stats.responseRate}%</Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.responseRate}%</div>
-            <p className="text-xs text-muted-foreground">From applications</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg. Match Score</CardTitle>
-            <Badge variant="secondary" className="text-xs">{stats.avgMatchScore}</Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.avgMatchScore}</div>
-            <p className="text-xs text-muted-foreground">Out of 1.0</p>
-          </CardContent>
-        </Card>
+      {/* Stat cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          {
+            label: "Open Matches",
+            value: stats.totalMatches,
+            sub: "Ready to apply",
+            icon: Briefcase,
+            gradient: "from-indigo-500/15 to-indigo-600/5",
+            iconBg: "bg-indigo-500/10",
+            iconColor: "text-indigo-600",
+            valueColor: "text-indigo-700",
+            border: "border-indigo-100",
+          },
+          {
+            label: "Applied",
+            value: stats.totalApplied,
+            sub: "Applications sent",
+            icon: Send,
+            gradient: "from-sky-500/15 to-sky-600/5",
+            iconBg: "bg-sky-500/10",
+            iconColor: "text-sky-600",
+            valueColor: "text-sky-700",
+            border: "border-sky-100",
+          },
+          {
+            label: "Response Rate",
+            value: `${stats.responseRate}%`,
+            sub: "From sent emails",
+            icon: TrendingUp,
+            gradient: "from-emerald-500/15 to-emerald-600/5",
+            iconBg: "bg-emerald-500/10",
+            iconColor: "text-emerald-600",
+            valueColor: "text-emerald-700",
+            border: "border-emerald-100",
+          },
+          {
+            label: "Avg. Match Score",
+            value: `${stats.avgScore}%`,
+            sub: "Across all matches",
+            icon: Star,
+            gradient: "from-amber-500/15 to-amber-600/5",
+            iconBg: "bg-amber-500/10",
+            iconColor: "text-amber-600",
+            valueColor: "text-amber-700",
+            border: "border-amber-100",
+          },
+        ].map((card) => (
+          <div
+            key={card.label}
+            className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.gradient} border ${card.border} p-5`}
+          >
+            <div className={`inline-flex p-2.5 rounded-xl ${card.iconBg} mb-3`}>
+              <card.icon className={`h-5 w-5 ${card.iconColor}`} />
+            </div>
+            <div className={`text-3xl font-bold ${card.valueColor} mb-1`}>{card.value}</div>
+            <div className="text-sm font-medium text-gray-700">{card.label}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{card.sub}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Job Matches Table */}
+      {/* Job list */}
       <ScrapedPosts page={page} />
     </div>
   )

@@ -7,12 +7,9 @@ import {
   Menu,
   ChevronDown,
   LogOut,
-  User,
-  History,
-  Plus
+  Settings,
+  SlidersHorizontal,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { DailyLimitProgress } from "./DailyLimitProgress"
 
 interface DashboardHeaderProps {
   user: {
@@ -26,88 +23,98 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ user, setSidebarOpen }: DashboardHeaderProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
 
+  const initials = user.name
+    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user.email?.charAt(0).toUpperCase() ?? "U"
+
   return (
-    <div className="sticky top-0 z-40 bg-white border-b border-gray-200">
-      <header className="h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center">
-          <button
-            className="lg:hidden p-2 -ml-2 mr-2 rounded-md text-gray-400 hover:text-gray-500"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu className="h-6 w-6" />
-          </button>
+    <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
+      <header className="h-14 flex items-center justify-between px-4 sm:px-6">
 
-        </div>
+        {/* Left: mobile menu toggle */}
+        <button
+          className="lg:hidden p-2 -ml-1 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          onClick={() => setSidebarOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
 
-        <div className="flex items-center gap-4">
-          {/* Actions */}
-          <div className="hidden sm:flex items-center gap-2">
-            <Link href="/onboarding">
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
-                <Plus className="h-4 w-4" />
-                New Loop
-              </Button>
-            </Link>
-          </div>
+        {/* Right: actions + user */}
+        <div className="flex items-center gap-3 ml-auto">
+          <Link href="/onboarding">
+            <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-sm shadow-indigo-200">
+              <SlidersHorizontal className="h-4 w-4" />
+              <span className="hidden sm:inline">Start Job Search</span>
+            </button>
+          </Link>
 
           {/* User Dropdown */}
-          <div className="relative ml-2">
+          <div className="relative">
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="flex items-center max-w-xs rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="flex items-center gap-2.5 pl-1 pr-2.5 py-1 rounded-xl hover:bg-gray-100 transition-colors"
             >
-              <span className="sr-only">Open user menu</span>
-              <div className="flex items-center p-1 rounded-full hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-colors">
-                <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 overflow-hidden border border-gray-200">
-                  {user.image ? (
-                    <img src={user.image} alt={user.name || "User"} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="font-medium text-sm">
-                      {user.name?.charAt(0) || user.email?.charAt(0) || "U"}
-                    </span>
-                  )}
-                </div>
-                <span className="hidden md:block ml-2 text-sm font-medium text-gray-700 max-w-[120px] truncate">
-                  {user.name || "User"}
-                </span>
-                <ChevronDown className="hidden md:block ml-1 h-3 w-3 text-gray-400" />
+              {/* Avatar */}
+              <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden border border-indigo-200/60 shrink-0">
+                {user.image ? (
+                  <img src={user.image} alt={user.name || "User"} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-xs font-bold text-indigo-600">{initials}</span>
+                )}
               </div>
+              <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[120px] truncate">
+                {user.name || "User"}
+              </span>
+              <ChevronDown className="hidden sm:block h-3.5 w-3.5 text-gray-400" />
             </button>
 
             {userMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 focus:outline-none">
-                <div className="px-4 py-2 border-b border-gray-100">
-                  <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 z-20 overflow-hidden">
+                  {/* User info */}
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden border border-indigo-200/60 shrink-0">
+                        {user.image ? (
+                          <img src={user.image} alt={user.name || "User"} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-xs font-bold text-indigo-600">{initials}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{user.name || "User"}</p>
+                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="py-1 px-1.5">
+                    <Link
+                      href="/dashboard/settings"
+                      className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <Settings className="h-4 w-4 text-gray-400" />
+                      Settings
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        signOut({ callbackUrl: "/" })
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </button>
+                  </div>
                 </div>
-                <Link
-                  href="/dashboard/settings"
-                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                  onClick={() => setUserMenuOpen(false)}
-                >
-                  <User className="h-4 w-4" />
-                  Profile
-                </Link>
-                <button
-                  onClick={() => {
-                    setUserMenuOpen(false)
-                    signOut({ callbackUrl: "/" })
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </button>
-              </div>
+              </>
             )}
           </div>
         </div>
       </header>
-
-      {/* Daily Limit Progress Bar */}
-      {/* <div className="px-4 sm:px-6 lg:px-8 py-3 bg-gray-50">
-        <DailyLimitProgress />
-      </div> */}
     </div>
   )
 }

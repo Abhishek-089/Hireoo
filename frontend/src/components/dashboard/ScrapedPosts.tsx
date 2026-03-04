@@ -2,7 +2,6 @@ import { ScrapedPostsClient } from "./ScrapedPostsClient"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { DailyLimitService } from "@/lib/daily-limit-service"
 import { extractEmails } from "@/lib/utils"
 
 export async function ScrapedPosts({ page = 1 }: { page?: number }) {
@@ -15,58 +14,30 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
   const pageSize = 10
   const currentPage = page < 1 ? 1 : page
   const userId = (session.user as any).id
-  const dailyLimit = await DailyLimitService.getDailyJobLimit(userId)
 
   let rawPosts: any[] = []
   let rawAppliedPosts: any[] = []
   let totalCount = 0
 
   try {
-    // Get user's daily limit reset time to filter posts shown today
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { daily_limit_reset_at: true }
-    })
-
-    // Calculate the start of today's limit window
-    // If reset time exists and is in the future, use the previous reset (24h ago)
-    // Otherwise use the current reset time
-    const now = new Date()
-    let limitWindowStart: Date
-
-    if (user?.daily_limit_reset_at && user.daily_limit_reset_at > now) {
-      // Reset time is in the future, so we're in the current window
-      // Window started 24 hours before the next reset
-      limitWindowStart = new Date(user.daily_limit_reset_at.getTime() - 24 * 60 * 60 * 1000)
-    } else {
-      // No reset time or it's passed, use a safe default (start of today in IST)
-      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
-      const nowIST = new Date(now.getTime() + IST_OFFSET_MS)
-      const year = nowIST.getUTCFullYear()
-      const month = nowIST.getUTCMonth()
-      const day = nowIST.getUTCDate()
-      const todayMidnightIST = new Date(Date.UTC(year, month, day, 0, 0, 0, 0))
-      limitWindowStart = new Date(todayMidnightIST.getTime() - IST_OFFSET_MS)
-    }
-
+    // Show ALL previously qualified unapplied posts (not just today's window).
+    // The daily limit only controls how many NEW posts get shown_to_user: true
+    // each day (enforced in scraped-post-matching.ts). Here we display everything
+    // the user has ever qualified for so they can still apply to past-day results.
     const baseMatchWhere = {
       user_id: userId,
       applied: false,
       shown_to_user: true,
-      shown_at: { gte: limitWindowStart },
       // Only fetch posts whose text contains an email address (DB-level filter)
       scrapedPost: {
         text: { contains: '@' }
       },
     }
 
-    // Total posts to expose is capped at dailyLimit — even if more were stored
-    // (e.g. posts from before the limit enforcement was in place)
-    const cappedSkip = Math.min((currentPage - 1) * pageSize, dailyLimit)
-    const cappedTake = Math.min(pageSize, dailyLimit - cappedSkip)
+    const skip = (currentPage - 1) * pageSize
 
     const [rows, rawCount, appliedRows] = await Promise.all([
-      // Get matched posts shown today — capped to dailyLimit
+      // Get all qualified unapplied matches — newest first (today's posts at top)
       prisma.scrapedPostMatch.findMany({
         where: baseMatchWhere,
         include: {
@@ -77,11 +48,11 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
           }
         },
         orderBy: { shown_at: "desc" },
-        skip: cappedSkip,
-        take: cappedTake > 0 ? cappedTake : 0,
+        skip,
+        take: pageSize,
       }),
 
-      // Count total matches shown today
+      // Count all qualified unapplied matches
       prisma.scrapedPostMatch.count({
         where: baseMatchWhere,
       }),
@@ -135,8 +106,7 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
 
     rawPosts = rows.map(mapMatchToPost)
     rawAppliedPosts = appliedRows.map(mapMatchToPost)
-    // Cap the displayed total to dailyLimit so pagination reflects the enforced cap
-    totalCount = Math.min(rawCount, dailyLimit)
+    totalCount = rawCount
 
   } catch (error) {
     console.error("ScrapedPosts failed to load from database:", error)

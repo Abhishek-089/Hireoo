@@ -90,12 +90,44 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
       }
 
-      // Handle Gmail OAuth tokens
-      if (account?.provider === 'google' && account.scope?.includes('gmail')) {
+      // On first Google sign-in, store Gmail credentials in DB
+      if (account?.provider === 'google' && account.scope?.includes('gmail') && user?.id) {
         token.gmailAccessToken = account.access_token
         token.gmailRefreshToken = account.refresh_token
         token.gmailExpiresAt = account.expires_at
         token.gmailScope = account.scope
+
+        try {
+          const encryptedAccessToken = TokenEncryption.encryptToken(account.access_token!)
+          const encryptedRefreshToken = TokenEncryption.encryptToken(account.refresh_token!)
+          const expiresAt = new Date(account.expires_at! * 1000)
+
+          await prisma.gmailCredentials.upsert({
+            where: { user_id: user.id },
+            update: {
+              access_token: encryptedAccessToken,
+              refresh_token: encryptedRefreshToken,
+              token_expiry: expiresAt,
+              scopes: account.scope!.split(' '),
+              updated_at: new Date(),
+            },
+            create: {
+              user_id: user.id,
+              email_address: user.email!,
+              access_token: encryptedAccessToken,
+              refresh_token: encryptedRefreshToken,
+              token_expiry: expiresAt,
+              scopes: account.scope!.split(' '),
+            },
+          })
+
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { gmail_connected: true },
+          })
+        } catch (error) {
+          console.error('Error storing Gmail credentials in jwt callback:', error)
+        }
       }
 
       return token
@@ -141,61 +173,51 @@ export const authOptions: NextAuthOptions = {
       }
       return session
     },
-    async signIn({ user, account, profile }) {
-      // Handle Gmail OAuth connection
-      if (account?.provider === 'google' && account.scope?.includes('gmail') && user.email) {
+    async signIn({ user, account }) {
+      // For Google sign-ins, check if this email already exists as a
+      // credentials-based account and link it so OAuthAccountNotLinked never fires.
+      if (account?.provider === 'google' && user.email) {
         try {
-          // Ensure we have a corresponding User record in our database
-          let dbUser = await prisma.user.findUnique({
-            where: { email: user.email! },
+          const dbUser = await prisma.user.findUnique({
+            where: { email: user.email },
           })
 
-          // If no user exists yet (e.g. first-time Google connection), create one
-          if (!dbUser) {
-            dbUser = await prisma.user.create({
-              data: {
-                email: user.email!,
-                name: user.name ?? null,
-                onboarding_step: 7, // Mark onboarding as complete for extension access
+          if (dbUser) {
+            // User registered with email+password — create the Google Account link
+            await (prisma as any).account.upsert({
+              where: {
+                provider_providerAccountId: {
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              update: {
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+              create: {
+                userId: dbUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
               },
             })
+            user.id = dbUser.id
           }
-
-          // Encrypt tokens
-          const encryptedAccessToken = TokenEncryption.encryptToken(account.access_token!)
-          const encryptedRefreshToken = TokenEncryption.encryptToken(account.refresh_token!)
-
-          // Calculate expiry date
-          const expiresAt = new Date((account.expires_at! * 1000))
-
-          // Store Gmail credentials linked to the DB user
-          await prisma.gmailCredentials.upsert({
-            where: { user_id: dbUser.id },
-            update: {
-              access_token: encryptedAccessToken,
-              refresh_token: encryptedRefreshToken,
-              token_expiry: expiresAt,
-              scopes: account.scope!.split(' '),
-              updated_at: new Date(),
-            },
-            create: {
-              user_id: dbUser.id,
-              email_address: user.email!,
-              access_token: encryptedAccessToken,
-              refresh_token: encryptedRefreshToken,
-              token_expiry: expiresAt,
-              scopes: account.scope!.split(' '),
-            },
-          })
-
-          // Update user onboarding status
-          await prisma.user.update({
-            where: { id: dbUser.id },
-            data: { gmail_connected: true }
-          })
-
+          // New users: return true and let the PrismaAdapter create User + Account.
+          // Gmail credentials are then stored in the jwt callback once user.id is known.
         } catch (error) {
-          console.error('Error storing Gmail credentials:', error)
+          console.error('Error in signIn callback:', error)
           return false
         }
       }
@@ -205,6 +227,6 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: "/signin",
-    newUser: "/signup",
+    newUser: "/dashboard",
   },
 }

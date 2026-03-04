@@ -1,3 +1,5 @@
+import { Check } from "lucide-react"
+
 interface Step {
   id: number
   title: string
@@ -11,55 +13,40 @@ interface ProgressBarProps {
 
 export function ProgressBar({ steps, currentStep }: ProgressBarProps) {
   return (
-    <div className="w-full flex justify-center">
-      <div className="flex items-center justify-between mb-4 w-full max-w-3xl">
-        {steps.map((step, index) => (
-          <div key={step.id} className="flex items-center flex-1 last:flex-none">
-            {/* Step Circle */}
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors shrink-0 ${
-                step.id < currentStep
-                  ? "bg-green-500 text-white"
-                  : step.id === currentStep
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 text-gray-600"
-              }`}
-            >
-              {step.id < currentStep ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              ) : (
-                step.id
-              )}
-            </div>
+    <div className="flex items-center justify-center gap-0">
+      {steps.map((step, index) => {
+        const isDone = step.id < currentStep
+        const isActive = step.id === currentStep
 
-            {/* Step Title */}
-            <div className="ml-3 mr-4">
-              <p
-                className={`text-sm font-medium whitespace-nowrap ${
-                  step.id <= currentStep ? "text-gray-900" : "text-gray-500"
-                }`}
-              >
+        return (
+          <div key={step.id} className="flex items-center">
+            {/* Circle + label */}
+            <div className="flex flex-col items-center gap-2">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all shrink-0 ${
+                isDone
+                  ? "bg-emerald-500 text-white"
+                  : isActive
+                  ? "bg-indigo-600 text-white ring-4 ring-indigo-100"
+                  : "bg-gray-100 text-gray-400"
+              }`}>
+                {isDone ? <Check className="h-4 w-4 stroke-[3]" /> : step.id}
+              </div>
+              <span className={`text-xs font-semibold whitespace-nowrap ${
+                isActive ? "text-indigo-700" : isDone ? "text-emerald-600" : "text-gray-400"
+              }`}>
                 {step.title}
-              </p>
+              </span>
             </div>
 
-            {/* Connector Line */}
+            {/* Connector */}
             {index < steps.length - 1 && (
-              <div
-                className={`flex-1 h-0.5 mx-2 transition-colors min-w-[2rem] ${
-                  step.id < currentStep ? "bg-green-500" : "bg-gray-200"
-                }`}
-              />
+              <div className={`h-0.5 w-24 sm:w-32 mx-3 mb-5 rounded-full transition-colors ${
+                step.id < currentStep ? "bg-emerald-400" : "bg-gray-200"
+              }`} />
             )}
           </div>
-        ))}
-      </div>
+        )
+      })}
     </div>
   )
 }

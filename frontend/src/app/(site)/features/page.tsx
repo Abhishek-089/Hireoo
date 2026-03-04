@@ -262,7 +262,7 @@ export default function FeaturesPage() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
                   {[
-                    { v: "500+", l: "Fresh jobs daily" },
+                    { v: "100+", l: "Fresh jobs daily" },
                     { v: "94%", l: "Email open rate" },
                     { v: "3×", l: "More interviews" },
                     { v: "< 1 min", l: "Apply to 10 jobs" },

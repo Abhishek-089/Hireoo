@@ -136,9 +136,7 @@ export function PricingTable() {
           ))}
         </div>
 
-        <p className="mt-8 text-center text-sm text-gray-400">
-          All plans include a 14-day free trial. No credit card required.
-        </p>
+      
       </div>
     </section>
   )

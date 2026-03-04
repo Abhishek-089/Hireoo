@@ -251,7 +251,7 @@ export function Hero() {
         <div className="max-w-5xl mx-auto px-6 lg:px-8 py-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { value: "500+", label: "Fresh jobs daily", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+              { value: "100+", label: "Fresh jobs daily", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
               { value: "94%", label: "Email open rate", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
               { value: "3x", label: "More interviews", icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" },
               { value: "< 1 min", label: "Apply to 10 jobs", icon: "M13 10V3L4 14h7v7l9-11h-7z" },

@@ -1,140 +1,106 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Progress } from '@/components/ui/progress'
-import { Card, CardContent } from '@/components/ui/card'
-import { Clock, TrendingUp, AlertCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Zap, Clock } from 'lucide-react'
 import Link from 'next/link'
 
 interface DailyLimitData {
-    current: number
-    limit: number
-    resetAt: string
-    canScrape: boolean
-    hoursUntilReset: number
-    percentageUsed: number
-    tier: string
+  current: number
+  limit: number
+  resetAt: string
+  canScrape: boolean
+  hoursUntilReset: number
+  percentageUsed: number
+  tier: string
 }
 
 export function DailyLimitProgress() {
-    const [limitData, setLimitData] = useState<DailyLimitData | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+  const [limitData, setLimitData] = useState<DailyLimitData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-    useEffect(() => {
-        fetchLimitData()
-        // Refresh every 30 seconds
-        const interval = setInterval(fetchLimitData, 30000)
-        return () => clearInterval(interval)
-    }, [])
+  useEffect(() => {
+    fetchLimitData()
+    const interval = setInterval(fetchLimitData, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
-    const fetchLimitData = async () => {
-        try {
-            const response = await fetch('/api/scraping/daily-limit')
-            if (!response.ok) {
-                throw new Error('Failed to fetch daily limit')
-            }
-            const data = await response.json()
-            setLimitData(data.data)
-            setError(null)
-        } catch (err) {
-            console.error('Error fetching daily limit:', err)
-            setError('Failed to load daily limit')
-        } finally {
-            setLoading(false)
-        }
+  const fetchLimitData = async () => {
+    try {
+      const response = await fetch('/api/scraping/daily-limit')
+      if (response.ok) {
+        const data = await response.json()
+        setLimitData(data.data)
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false)
     }
+  }
 
-    if (loading) {
-        return (
-            <Card className="w-full">
-                <CardContent className="pt-6">
-                    <div className="animate-pulse">
-                        <div className="h-4 bg-gray-200 rounded w-1/3 mb-2"></div>
-                        <div className="h-2 bg-gray-200 rounded w-full"></div>
-                    </div>
-                </CardContent>
-            </Card>
-        )
-    }
+  if (loading || !limitData) return null
 
-    if (error || !limitData) {
-        return null // Silently fail to avoid blocking UI
-    }
+  const { current, limit, percentageUsed, hoursUntilReset, tier } = limitData
+  const limitReached = current >= limit
+  const isFreeUser = tier === 'Free'
 
-    const { current, limit, hoursUntilReset, percentageUsed, tier } = limitData
+  const barColor = percentageUsed >= 90
+    ? 'bg-red-500'
+    : percentageUsed >= 70
+    ? 'bg-amber-400'
+    : 'bg-indigo-500'
 
-    // Determine color based on usage
-    const getProgressColor = () => {
-        if (percentageUsed >= 90) return 'bg-red-500'
-        if (percentageUsed >= 70) return 'bg-yellow-500'
-        return 'bg-green-500'
-    }
+  const labelColor = percentageUsed >= 90
+    ? 'text-red-600'
+    : percentageUsed >= 70
+    ? 'text-amber-600'
+    : 'text-indigo-600'
 
-    const getTextColor = () => {
-        if (percentageUsed >= 90) return 'text-red-600'
-        if (percentageUsed >= 70) return 'text-yellow-600'
-        return 'text-green-600'
-    }
+  return (
+    <div className={`rounded-2xl border px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 ${
+      limitReached ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100 shadow-sm'
+    }`}>
+      {/* Icon + label */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className={`p-2 rounded-xl ${limitReached ? 'bg-red-100' : 'bg-indigo-500/10'}`}>
+          <Zap className={`h-4 w-4 ${limitReached ? 'text-red-500' : 'text-indigo-600'}`} />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Daily Job Limit</p>
+          <p className={`text-xs font-medium ${labelColor}`}>
+            {current} / {limit} matched today
+          </p>
+        </div>
+      </div>
 
-    const isFreeUser = tier === 'Free'
-    const limitReached = current >= limit
+      {/* Progress */}
+      <div className="flex-1 space-y-1.5 min-w-0">
+        <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+            style={{ width: `${Math.min(percentageUsed, 100)}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">{percentageUsed}% used</span>
+          {limitReached && (
+            <span className="flex items-center gap-1 text-[11px] text-gray-400">
+              <Clock className="h-3 w-3" />
+              Resets in {hoursUntilReset}h
+            </span>
+          )}
+        </div>
+      </div>
 
-    return (
-        <Card className="w-full border-2">
-            <CardContent className="pt-6 pb-4">
-                <div className="space-y-3">
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <TrendingUp className={`h-5 w-5 ${getTextColor()}`} />
-                            <h3 className="font-semibold text-sm">Daily Job Limit</h3>
-                        </div>
-
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                            <span className={`font-medium ${getTextColor()}`}>
-                                {current} / {limit} matched jobs today
-                            </span>
-                            <span className="text-xs text-gray-500">{percentageUsed}%</span>
-                        </div>
-                        <Progress
-                            value={percentageUsed}
-                            className="h-2"
-                            indicatorClassName={getProgressColor()}
-                        />
-                    </div>
-
-                    {/* Limit Reached Warning */}
-                    {limitReached && (
-                        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 space-y-1">
-                                <p className="text-sm font-medium text-red-900">
-                                    Daily limit reached
-                                </p>
-                                <p className="text-xs text-red-700">
-                                    Come back in {hoursUntilReset} hours to scrape more jobs
-                                    {isFreeUser && ' or upgrade to Premium for higher limits'}
-                                </p>
-                                {isFreeUser && (
-                                    <Link href="/dashboard/billing">
-                                        <Button size="sm" variant="destructive" className="mt-2">
-                                            Upgrade to Premium
-                                        </Button>
-                                    </Link>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-
-                </div>
-            </CardContent>
-        </Card>
-    )
+      {/* Upgrade CTA */}
+      {limitReached && isFreeUser && (
+        <Link
+          href="/dashboard/billing"
+          className="shrink-0 text-xs font-semibold px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors whitespace-nowrap"
+        >
+          Upgrade
+        </Link>
+      )}
+    </div>
+  )
 }

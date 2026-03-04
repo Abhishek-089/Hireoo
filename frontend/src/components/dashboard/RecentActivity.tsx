@@ -1,5 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Send, Inbox, Star, Clock } from "lucide-react"
+import { Send, Inbox, Star, ArrowUpRight } from "lucide-react"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -17,200 +16,169 @@ interface ActivityItem {
 async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
   try {
     const [applications, replies, latestMatches] = await Promise.all([
-      // 1. Recent Applications (Emails Sent)
       prisma.scrapedApplication.findMany({
         where: { user_id: userId, gmail_thread_id: { not: null } },
         orderBy: { sent_at: 'desc' },
         take: 5,
-        include: {
-          scrapedPost: {
-            include: { job: true }
-          }
-        }
+        include: { scrapedPost: { include: { job: true } } }
       }),
-      // 2. Recent Replies (incoming emails)
       prisma.emailLog.findMany({
-        where: {
-          user_id: userId,
-          direction: 'received',
-          is_reply: true
-        },
+        where: { user_id: userId, direction: 'received', is_reply: true },
         orderBy: { sent_at: 'desc' },
         take: 5
       }),
-      // 3. New High Quality Matches - query through ScrapedPostMatch
       prisma.scrapedPostMatch.findMany({
-        where: {
-          user_id: userId,
-          match_score: { gte: 80 }
-        },
+        where: { user_id: userId, match_score: { gte: 80 } },
         orderBy: { matched_at: 'desc' },
         take: 5,
-        include: {
-          scrapedPost: {
-            include: { job: true }
-          }
-        }
+        include: { scrapedPost: { include: { job: true } } }
       })
     ])
 
     const activities: ActivityItem[] = []
 
-    // Map Applications
     applications.forEach((app: any) => {
       let subtitle = `Sent email to ${app.hr_email}`
       if (app.scrapedPost.job?.company && app.scrapedPost.job?.title) {
-        subtitle = `Applied for ${app.scrapedPost.job.title} at ${app.scrapedPost.job.company}`
+        subtitle = `${app.scrapedPost.job.title} at ${app.scrapedPost.job.company}`
       } else if (app.scrapedPost.job?.company) {
         subtitle = `Applied to ${app.scrapedPost.job.company}`
       }
-
-      const actions = [
-        { label: "View Post", href: app.scrapedPost.post_url, primary: false }
-      ]
-
+      const actions = [{ label: "View Post", href: app.scrapedPost.post_url, primary: false }]
       if (app.gmail_thread_id) {
-        actions.unshift({
-          label: "Check Email",
-          href: `https://mail.google.com/mail/u/0/#inbox/${app.gmail_thread_id}`,
-          primary: true
-        })
+        actions.unshift({ label: "View Email", href: `https://mail.google.com/mail/u/0/#inbox/${app.gmail_thread_id}`, primary: true })
       }
-
-      activities.push({
-        id: `app-${app.id}`,
-        type: 'email_sent',
-        title: "Application Sent",
-        subtitle: subtitle,
-        date: app.sent_at,
-        actions: actions
-      })
+      activities.push({ id: `app-${app.id}`, type: 'email_sent', title: "Application Sent", subtitle, date: app.sent_at, actions })
     })
 
-    // Map Replies
     replies.forEach((reply: any) => {
       activities.push({
         id: `reply-${reply.id}`,
         type: 'reply_received',
-        title: "New Reply Received",
+        title: "Reply Received",
         subtitle: reply.snippet || "You received a response",
         date: reply.sent_at,
-        actions: [
-          {
-            label: "View Thread",
-            href: reply.thread_id ? `https://mail.google.com/mail/u/0/#inbox/${reply.thread_id}` : '#',
-            primary: true
-          }
-        ]
+        actions: [{ label: "View Thread", href: reply.thread_id ? `https://mail.google.com/mail/u/0/#inbox/${reply.thread_id}` : '#', primary: true }]
       })
     })
 
-    // Map Matches
     latestMatches.forEach((match: any) => {
       const post = match.scrapedPost
       if (post) {
-        let subtitle = `${match.match_score}% Match Score`
-        if (post.job?.company) {
-          subtitle = `${post.job.title || 'Job'} at ${post.job.company} • ${match.match_score}% Match`
-        }
-
+        const subtitle = post.job?.company
+          ? `${post.job.title || 'Job'} at ${post.job.company} · ${match.match_score}% match`
+          : `${match.match_score}% match score`
         activities.push({
           id: `match-${post.id}`,
           type: 'match_found',
           title: "High Match Found",
-          subtitle: subtitle,
+          subtitle,
           date: match.matched_at,
-          actions: [
-            { label: "View Match", href: `/dashboard/job-matches`, primary: true }
-          ]
+          actions: [{ label: "Review", href: `/dashboard/job-matches`, primary: true }]
         })
       }
     })
 
-    // Sort combined list by date desc and take top 5
-    return activities
-      .sort((a, b) => b.date.getTime() - a.date.getTime())
-      .slice(0, 5)
-
+    return activities.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 6)
   } catch (error) {
     console.error('Error fetching recent activity:', error)
     return []
   }
 }
 
-// Helper functions
-function ActivityIcon({ type }: { type: string }) {
-  switch (type) {
-    case 'email_sent':
-      return <div className="p-2 rounded-full bg-blue-100"><Send className="h-4 w-4 text-blue-600" /></div>
-    case 'reply_received':
-      return <div className="p-2 rounded-full bg-green-100"><Inbox className="h-4 w-4 text-green-600" /></div>
-    case 'match_found':
-      return <div className="p-2 rounded-full bg-orange-100"><Star className="h-4 w-4 text-orange-600" /></div>
-    default:
-      return <div className="p-2 rounded-full bg-gray-100"><Clock className="h-4 w-4 text-gray-600" /></div>
-  }
-}
-
 function formatTimeAgo(date: Date) {
-  const now = new Date()
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
+  const diffInSeconds = Math.floor((new Date().getTime() - date.getTime()) / 1000)
   if (diffInSeconds < 60) return 'Just now'
-
   const diffInMinutes = Math.floor(diffInSeconds / 60)
   if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-
   const diffInHours = Math.floor(diffInMinutes / 60)
   if (diffInHours < 24) return `${diffInHours}h ago`
-
   const diffInDays = Math.floor(diffInHours / 24)
   if (diffInDays < 7) return `${diffInDays}d ago`
-
   return date.toLocaleDateString()
+}
+
+const typeConfig = {
+  email_sent: {
+    icon: Send,
+    bg: "bg-sky-100",
+    iconColor: "text-sky-600",
+    dot: "bg-sky-400",
+  },
+  reply_received: {
+    icon: Inbox,
+    bg: "bg-emerald-100",
+    iconColor: "text-emerald-600",
+    dot: "bg-emerald-400",
+  },
+  match_found: {
+    icon: Star,
+    bg: "bg-amber-100",
+    iconColor: "text-amber-600",
+    dot: "bg-amber-400",
+  },
 }
 
 export async function RecentActivity() {
   const session = await getServerSession(authOptions)
-  const userId = (session?.user as any)?.id // Type assertion to access id
+  const userId = (session?.user as any)?.id
 
   if (!userId) return null
 
   const activities = await getRecentActivity(userId)
 
   return (
-    <Card className="border-none shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-xl font-bold text-gray-900">Recent Activity</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {activities.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No recent activity. Start applying to jobs!
+    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
+        <Link
+          href="/dashboard/email-activity"
+          className="text-xs text-indigo-600 font-medium hover:text-indigo-700 flex items-center gap-1"
+        >
+          View all <ArrowUpRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      {activities.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-14 text-center px-6">
+          <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
+            <Send className="h-5 w-5 text-gray-400" />
           </div>
-        ) : (
-          <div className="space-y-6">
-            {activities.map((activity) => (
-              <div key={activity.id} className="flex items-start space-x-4">
-                <ActivityIcon type={activity.type} />
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900">{activity.title}</p>
-                    <span className="text-xs text-gray-500">{formatTimeAgo(activity.date)}</span>
+          <p className="text-sm font-medium text-gray-600">No activity yet</p>
+          <p className="text-xs text-gray-400 mt-1">Your applications and replies will appear here.</p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-gray-50">
+          {activities.map((activity) => {
+            const cfg = typeConfig[activity.type]
+            return (
+              <li key={activity.id} className="flex items-start gap-4 px-5 py-4 hover:bg-gray-50/60 transition-colors">
+                {/* Icon */}
+                <div className={`shrink-0 p-2 rounded-xl ${cfg.bg}`}>
+                  <cfg.icon className={`h-4 w-4 ${cfg.iconColor}`} />
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-900">{activity.title}</p>
+                    <span className="text-[11px] text-gray-400 shrink-0 mt-0.5">{formatTimeAgo(activity.date)}</span>
                   </div>
-                  <p className="text-sm text-gray-500 line-clamp-1">{activity.subtitle}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">{activity.subtitle}</p>
 
                   {activity.actions.length > 0 && (
-                    <div className="flex flex-wrap gap-3 mt-1">
+                    <div className="flex flex-wrap gap-2 mt-2">
                       {activity.actions.map((action, i) => (
                         <Link
                           key={i}
                           href={action.href}
                           target={action.href.startsWith('http') ? '_blank' : undefined}
-                          className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${action.primary
-                            ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
-                            : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
-                            }`}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors ${
+                            action.primary
+                              ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
                         >
                           {action.label}
                         </Link>
@@ -218,11 +186,11 @@ export async function RecentActivity() {
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }

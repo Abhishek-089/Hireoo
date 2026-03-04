@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { signIn } from "next-auth/react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Mail, ExternalLink, Star, CheckCircle2, MessageSquare, Zap, Loader2, MapPin, Briefcase, Clock } from "lucide-react"
 import { parseLinkedInPost, type ParsedPost } from "@/lib/post-parser"
 
@@ -323,9 +321,22 @@ export function ScrapedPostsClient({
     setAutoApplyOpen(true)
   }
 
-  function openAutoApplyAll() {
-    const allIds = new Set(unappliedPosts.map((p) => p.id))
-    openAutoApply(allIds)
+  async function openAutoApplyAll() {
+    try {
+      const res = await fetch("/api/scraping/all-matches")
+      const data = await res.json()
+      const allPosts: ScrapedPostItem[] = data.posts ?? []
+
+      if (allPosts.length === 0) return
+
+      setAutoApplyQueue(
+        allPosts.map((post) => ({ post, status: "pending" as AutoApplyStatus }))
+      )
+      setAutoApplyDone(false)
+      setAutoApplyOpen(true)
+    } catch (e) {
+      console.error("Failed to fetch all matches for auto-apply", e)
+    }
   }
 
   const updateItemStatus = useCallback(
@@ -449,74 +460,73 @@ export function ScrapedPostsClient({
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            {!showAppliedBadge && unappliedPosts.length > 0 && (
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleSelectAll}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                title="Select all"
-              />
-            )}
-            <span>{title}</span>
+    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      {/* Section header */}
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          {!showAppliedBadge && unappliedPosts.length > 0 && (
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
+              title="Select all"
+            />
+          )}
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Showing {showingFrom}–{showingTo} of {totalCount} post{totalCount === 1 ? "" : "s"}
+            </p>
           </div>
+        </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Apply Selected */}
-            {!showAppliedBadge && selectedIds.size > 0 && (
-              <button
-                type="button"
-                onClick={() => openAutoApply()}
-                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                Apply Selected ({selectedIds.size})
-              </button>
-            )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!showAppliedBadge && selectedIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => openAutoApply()}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Apply Selected ({selectedIds.size})
+            </button>
+          )}
+          {!showAppliedBadge && unappliedPosts.length > 0 && selectedIds.size === 0 && (
+            <button
+              type="button"
+              onClick={openAutoApplyAll}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors cursor-pointer"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Auto Apply All ({totalCount})
+            </button>
+          )}
+        </div>
+      </div>
 
-            {/* Auto Apply All */}
-            {!showAppliedBadge && unappliedPosts.length > 0 && selectedIds.size === 0 && (
-              <button
-                type="button"
-                onClick={openAutoApplyAll}
-                className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                Auto Apply All ({unappliedPosts.length})
-              </button>
-            )}
-
-            <span className="text-sm font-normal text-gray-500">
-              Showing {showingFrom}-{showingTo} of {totalCount} post
-              {totalCount === 1 ? "" : "s"}
-            </span>
-          </div>
-        </CardTitle>
-      </CardHeader>
-
-      <CardContent>
+      <div className="p-5">
         {error && (
-          <div className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700">
             {error}
           </div>
         )}
         {success && (
-          <div className="mb-3 rounded-md border border-green-300 bg-green-50 px-3 py-2 text-xs text-green-700">
+          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-xs text-green-700">
             {success}
           </div>
         )}
 
         {posts.length === 0 ? (
-          <div className="text-center py-6 text-sm text-gray-600">
-            No jobs discovered yet. Use the Chrome extension to find job
-            opportunities.
+          <div className="flex flex-col items-center justify-center py-14 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
+              <Briefcase className="h-5 w-5 text-gray-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-600">No jobs found yet</p>
+            <p className="text-xs text-gray-400 mt-1">Matched jobs will appear here once the system finds opportunities for you.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {posts.map((post) => {
               const primaryEmail = post.emails[0]
               const showEnriched = post.isEnriched && post.jobData
@@ -526,18 +536,22 @@ export function ScrapedPostsClient({
               return (
                 <div
                   key={post.id}
-                  className={`border rounded-lg p-4 flex flex-col gap-2 bg-white shadow-sm transition-colors ${
-                    isSelected ? "border-blue-400 bg-blue-50/30" : ""
+                  className={`rounded-2xl border p-4 flex flex-col gap-2 transition-all ${
+                    isSelected
+                      ? "border-indigo-300 bg-indigo-50/30"
+                      : post.applied
+                      ? "border-gray-100 bg-gray-50/50"
+                      : "border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm"
                   }`}
                 >
                   <div className="flex items-start gap-3">
                     {!showAppliedBadge && !post.applied && (
-                      <div className="pt-1 shrink-0">
+                      <div className="pt-0.5 shrink-0">
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelect(post.id)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
                         />
                       </div>
                     )}
@@ -552,20 +566,19 @@ export function ScrapedPostsClient({
                                 ? post.jobData.title
                                 : parsed.title || "Hiring Post"}
                             </h3>
-                            {post.matchScore !== null && post.matchQuality && (
-                              <Badge
-                                variant="outline"
-                                className={`flex items-center gap-1 shrink-0 ${
+                              {post.matchScore !== null && post.matchQuality && (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold shrink-0 ${
                                   post.matchQuality === "good"
-                                    ? "bg-green-50 text-green-700 border-green-300"
+                                    ? "bg-emerald-100 text-emerald-700"
                                     : post.matchQuality === "medium"
-                                    ? "bg-yellow-50 text-yellow-700 border-yellow-300"
-                                    : "bg-gray-50 text-gray-600 border-gray-300"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-gray-100 text-gray-600"
                                 }`}
                               >
                                 <Star className="h-3 w-3" />
                                 {Math.round(post.matchScore)}%
-                              </Badge>
+                              </span>
                             )}
                           </div>
 
@@ -596,9 +609,9 @@ export function ScrapedPostsClient({
                               </span>
                             )}
                             {parsed.workMode && (
-                              <Badge variant="outline" className="text-xs py-0 h-5">
+                              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
                                 {parsed.workMode}
-                              </Badge>
+                              </span>
                             )}
                             {((showEnriched && post.jobData?.salary) || parsed.salary) && (
                               <span className="text-green-700 font-medium">
@@ -612,16 +625,15 @@ export function ScrapedPostsClient({
                             const skills = (showEnriched && post.jobData?.skills?.length)
                               ? post.jobData.skills
                               : parsed.skills
-                            return skills.length > 0 ? (
+                                return skills.length > 0 ? (
                               <div className="flex flex-wrap gap-1.5 mb-2.5">
                                 {skills.slice(0, 8).map((skill) => (
-                                  <Badge
+                                  <span
                                     key={skill}
-                                    variant="outline"
-                                    className="text-xs py-0 h-5 border-blue-200 bg-blue-50 text-blue-700"
+                                    className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100"
                                   >
                                     {skill}
-                                  </Badge>
+                                  </span>
                                 ))}
                                 {skills.length > 8 && (
                                   <span className="text-xs text-gray-500 self-center">
@@ -644,14 +656,13 @@ export function ScrapedPostsClient({
                             <div className="flex flex-wrap gap-2 items-center">
                               {post.emails.length > 0 ? (
                                 post.emails.map((email) => (
-                                  <Badge
+                                  <span
                                     key={email}
-                                    variant="secondary"
-                                    className="flex items-center gap-1 text-xs"
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600"
                                   >
                                     <Mail className="h-3 w-3" />
                                     {email}
-                                  </Badge>
+                                  </span>
                                 ))
                               ) : (
                                 <span className="text-xs text-gray-400 italic">No email found</span>
@@ -672,32 +683,23 @@ export function ScrapedPostsClient({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-gray-100">
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs text-gray-500">
-                            Discovered at {formatDate(post.createdAt)}
+                          <span className="text-[11px] text-gray-400">
+                            Found {formatDate(post.createdAt)}
                           </span>
                           {post.applied && post.appliedAt && (
-                            <Badge
-                              variant="outline"
-                              className="flex items-center gap-1 bg-green-50 text-green-700 border-green-300"
-                            >
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
                               <CheckCircle2 className="h-3 w-3" />
                               Applied {formatDate(post.appliedAt.toString())}
-                            </Badge>
+                            </span>
                           )}
-                          {post.hasReplies &&
-                            post.replies &&
-                            post.replies.length > 0 && (
-                              <Badge
-                                variant="outline"
-                                className="flex items-center gap-1 bg-blue-50 text-blue-700 border-blue-300"
-                              >
-                                <MessageSquare className="h-3 w-3" />
-                                {post.replies.length}{" "}
-                                {post.replies.length === 1 ? "reply" : "replies"}
-                              </Badge>
-                            )}
+                          {post.hasReplies && post.replies && post.replies.length > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                              <MessageSquare className="h-3 w-3" />
+                              {post.replies.length} {post.replies.length === 1 ? "reply" : "replies"}
+                            </span>
+                          )}
                         </div>
 
                         {!post.applied && (
@@ -705,126 +707,100 @@ export function ScrapedPostsClient({
                             type="button"
                             disabled={loading && activePost?.id === post.id}
                             onClick={() => handleApplyClick(post)}
-                            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer"
                           >
-                            {loading && activePost?.id === post.id
-                              ? "Preparing..."
-                              : "Apply"}
+                            {loading && activePost?.id === post.id ? "Preparing…" : "Apply"}
                           </button>
                         )}
                         {post.applied && (
-                          <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
                             <CheckCircle2 className="h-4 w-4" />
                             Applied
                           </span>
                         )}
                       </div>
 
-                      {post.applied &&
-                        post.hasReplies &&
-                        post.replies &&
-                        post.replies.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-200">
-                            <div className="text-xs font-medium text-gray-700 mb-2">
-                              Email Replies:
-                            </div>
-                            <div className="space-y-2">
-                              {post.replies.map((reply) => (
-                                <div
-                                  key={reply.id}
-                                  className="bg-gray-50 rounded-md p-2 border border-gray-200"
-                                >
-                                  <div className="flex items-start justify-between mb-1">
-                                    <div className="flex items-center gap-2">
-                                      <Mail className="h-3 w-3 text-gray-500" />
-                                      <span className="text-xs font-medium text-gray-900">
-                                        {reply.from_email}
-                                      </span>
-                                    </div>
-                                    <span className="text-xs text-gray-500">
-                                      {formatDate(reply.received_at.toString())}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-600 mb-1">
-                                    <strong>Subject:</strong> {reply.subject}
-                                  </div>
-                                  <div className="text-xs text-gray-700 line-clamp-2">
-                                    {reply.body_text}
-                                  </div>
+                      {post.applied && post.hasReplies && post.replies && post.replies.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-xs font-semibold text-gray-700 mb-2">Recruiter Replies</p>
+                          <div className="space-y-2">
+                            {post.replies.map((reply) => (
+                              <div key={reply.id} className="rounded-xl bg-indigo-50/50 border border-indigo-100 p-3">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-semibold text-gray-800 flex items-center gap-1.5">
+                                    <Mail className="h-3 w-3 text-indigo-400" />
+                                    {reply.from_email}
+                                  </span>
+                                  <span className="text-[11px] text-gray-400">{formatDate(reply.received_at.toString())}</span>
                                 </div>
-                              ))}
-                            </div>
+                                <p className="text-xs text-gray-500 mb-0.5"><span className="font-medium">Subject:</span> {reply.subject}</p>
+                                <p className="text-xs text-gray-600 line-clamp-2">{reply.body_text}</p>
+                              </div>
+                            ))}
                           </div>
-                        )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )
             })}
 
-            <div className="flex items-center justify-between pt-2 border-t">
-              <span className="text-xs text-gray-500">
-                Page {currentPage} of {totalPages}
-              </span>
-              <div className="flex gap-2">
-                {currentPage > 1 ? (
-                  <Link
-                    href={`/dashboard?page=${currentPage - 1}`}
-                    className="inline-flex items-center justify-center rounded-md border px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Previous
-                  </Link>
-                ) : (
-                  <span className="inline-flex items-center justify-center rounded-md border px-3 py-1 text-xs text-gray-400 cursor-default">
-                    Previous
-                  </span>
-                )}
-                {currentPage < totalPages ? (
-                  <Link
-                    href={`/dashboard?page=${currentPage + 1}`}
-                    className="inline-flex items-center justify-center rounded-md border px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Next
-                  </Link>
-                ) : (
-                  <span className="inline-flex items-center justify-center rounded-md border px-3 py-1 text-xs text-gray-400 cursor-default">
-                    Next
-                  </span>
-                )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-gray-100">
+                <span className="text-xs text-gray-400">Page {currentPage} of {totalPages}</span>
+                <div className="flex gap-2">
+                  {currentPage > 1 ? (
+                    <Link
+                      href={`/dashboard/job-matches?page=${currentPage - 1}`}
+                      className="inline-flex items-center justify-center rounded-xl border border-gray-200 px-3.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Previous
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center justify-center rounded-xl border border-gray-100 px-3.5 py-1.5 text-xs text-gray-300 cursor-default">
+                      Previous
+                    </span>
+                  )}
+                  {currentPage < totalPages ? (
+                    <Link
+                      href={`/dashboard/job-matches?page=${currentPage + 1}`}
+                      className="inline-flex items-center justify-center rounded-xl border border-gray-200 px-3.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Next
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center justify-center rounded-xl border border-gray-100 px-3.5 py-1.5 text-xs text-gray-300 cursor-default">
+                      Next
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
-      </CardContent>
+      </div>
 
       {/* ── Single Apply: Cover Letter Modal ─────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-xl rounded-lg bg-white p-4 shadow-lg">
-            <h2 className="text-sm font-semibold mb-2">Review your cover letter</h2>
-            <p className="text-xs text-gray-500 mb-2">
-              You can edit this text before we send it from your connected email account.
-            </p>
-            <textarea
-              className="w-full h-56 border rounded-md p-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={coverLetter}
-              onChange={(e) => setCoverLetter(e.target.value)}
-            />
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => { setModalOpen(false); setActivePost(null) }}
-                className="text-xs text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={sending}
-                onClick={handleSend}
-                className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {sending ? "Sending..." : "Send email"}
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Review Cover Letter</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Edit before sending — it will be sent from your Gmail.</p>
+            </div>
+            <div className="p-5">
+              <textarea
+                className="w-full h-56 border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 resize-none"
+                value={coverLetter}
+                onChange={(e) => setCoverLetter(e.target.value)}
+              />
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">
+              <button type="button" onClick={() => { setModalOpen(false); setActivePost(null) }} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer">Cancel</button>
+              <button type="button" disabled={sending} onClick={handleSend}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer">
+                {sending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…</> : <><Mail className="h-3.5 w-3.5" /> Send Application</>}
               </button>
             </div>
           </div>
@@ -833,43 +809,28 @@ export function ScrapedPostsClient({
 
       {/* ── Resume Upload Modal ───────────────────────────────────────────── */}
       {resumeModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-lg">
-            <h2 className="text-sm font-semibold mb-2">Upload your resume</h2>
-            <p className="text-xs text-gray-500 mb-3">
-              You need to upload your resume once before we can send applications on
-              your behalf.
-            </p>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx"
-              onChange={(e) => {
-                const file = e.target.files?.[0] || null
-                setResumeFile(file)
-                setResumeError(null)
-              }}
-              className="mb-3 text-xs"
-            />
-            {resumeError && (
-              <div className="mb-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {resumeError}
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => { setResumeModalOpen(false); setResumeFile(null); setResumeError(null) }}
-                className="text-xs text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!resumeFile || resumeUploading}
-                onClick={handleResumeUpload}
-                className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {resumeUploading ? "Uploading..." : "Upload resume"}
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Upload Resume</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Required once before we can send applications for you.</p>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
+                <span className="text-xs text-gray-500">{resumeFile ? resumeFile.name : "Click to select PDF or Word file"}</span>
+                <span className="text-[11px] text-gray-400 mt-1">Max 10 MB</span>
+                <input type="file" accept=".pdf,.doc,.docx" className="hidden"
+                  onChange={(e) => { setResumeFile(e.target.files?.[0] || null); setResumeError(null) }} />
+              </label>
+              {resumeError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{resumeError}</div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">
+              <button type="button" onClick={() => { setResumeModalOpen(false); setResumeFile(null); setResumeError(null) }} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer">Cancel</button>
+              <button type="button" disabled={!resumeFile || resumeUploading} onClick={handleResumeUpload}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer">
+                {resumeUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</> : "Upload & Continue"}
               </button>
             </div>
           </div>
@@ -878,26 +839,20 @@ export function ScrapedPostsClient({
 
       {/* ── Gmail Connect Modal ───────────────────────────────────────────── */}
       {gmailModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-lg">
-            <h2 className="text-sm font-semibold mb-2">Connect your Gmail</h2>
-            <p className="text-xs text-gray-500 mb-3">
-              To send applications automatically, you need to connect your Gmail account.
-            </p>
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setGmailModalOpen(false)}
-                className="text-xs text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConnectGmail}
-                className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-              >
-                Connect Gmail
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Connect Gmail</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Required to send applications on your behalf.</p>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-gray-600">Connect your Gmail account so Hireoo can send application emails directly from your inbox.</p>
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">
+              <button type="button" onClick={() => setGmailModalOpen(false)} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleConnectGmail}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer">
+                <Mail className="h-3.5 w-3.5" /> Connect Gmail
               </button>
             </div>
           </div>
@@ -906,8 +861,8 @@ export function ScrapedPostsClient({
 
       {/* ── Auto Apply Progress Modal ─────────────────────────────────────── */}
       {autoApplyOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="px-5 py-4 border-b flex items-center justify-between">
               <div>
@@ -1020,7 +975,7 @@ export function ScrapedPostsClient({
                   <button
                     type="button"
                     onClick={runAutoApply}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors cursor-pointer"
                   >
                     <Zap className="h-3.5 w-3.5" />
                     Start Sending ({autoApplyQueue.length} emails)
@@ -1031,6 +986,6 @@ export function ScrapedPostsClient({
           </div>
         </div>
       )}
-    </Card>
+    </div>
   )
 }

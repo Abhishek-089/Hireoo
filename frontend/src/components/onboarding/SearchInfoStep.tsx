@@ -1,12 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, FileText, X, Search, Briefcase, Calendar, Clock } from "lucide-react"
+import { Upload, FileText, X, Search, Briefcase, Calendar, ChevronDown, Loader2, CheckCircle2 } from "lucide-react"
 
 interface SearchInfoStepProps {
   data: any
@@ -16,244 +11,206 @@ interface SearchInfoStepProps {
   isLastStep: boolean
 }
 
-// Experience options
 const EXPERIENCE_LEVELS = [
-  { value: "0-1", label: "0-1 Years (Entry)" },
-  { value: "1-3", label: "1-3 Years (Junior)" },
-  { value: "3-5", label: "3-5 Years (Mid-Level)" },
-  { value: "5-10", label: "5-10 Years (Senior)" },
-  { value: "10+", label: "10+ Years (Lead/Architect)" },
+  { value: "0-1", label: "0–1 Years (Entry Level)" },
+  { value: "1-3", label: "1–3 Years (Junior)" },
+  { value: "3-5", label: "3–5 Years (Mid-Level)" },
+  { value: "5-10", label: "5–10 Years (Senior)" },
+  { value: "10+", label: "10+ Years (Lead / Architect)" },
 ]
 
-// Date posted options
-// Date posted options (LinkedIn compatible values)
 const DATE_POSTED_OPTIONS = [
   { value: "r86400", label: "Past 24 hours" },
   { value: "r604800", label: "Past week" },
   { value: "r2592000", label: "Past month" },
 ]
 
-export function SearchInfoStep({
-  data,
-  onNext,
-  onBack,
-  isFirstStep,
-  isLastStep,
-}: SearchInfoStepProps) {
-  // Form State
+function NativeSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+  placeholder: string
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer transition"
+      >
+        <option value="" disabled hidden>{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+    </div>
+  )
+}
+
+export function SearchInfoStep({ data, onNext, isFirstStep }: SearchInfoStepProps) {
   const [formData, setFormData] = useState({
     jobKeywords: data?.jobKeywords || [],
     experienceLevel: data?.experienceLevel || "",
     datePosted: data?.datePosted || "r604800",
     resume: data?.resume || null,
   })
-
-  // Resume upload state
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Resume Handlers
-
-  // Resume Handlers
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) {
-        // Validate file type
-        const allowedTypes = [
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        ]
-  
-        if (!allowedTypes.includes(file.type)) {
-          setError("Please select a PDF or Word document (.doc, .docx)")
-          return
-        }
-  
-        // Validate file size (max 10MB)
-        if (file.size > 10 * 1024 * 1024) {
-          setError("File size must be less than 10MB")
-          return
-        }
-  
-        // In a real app, we might upload immediately or just store the file object to upload on "Next"
-        // For this refactor, let's simulate the state update and assume upload happens on next or separately.
-        // If reusing the previous logic:
-        uploadResume(file)
-    }
+    if (!file) return
+    const allowed = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+    if (!allowed.includes(file.type)) { setError("Please select a PDF or Word document (.doc, .docx)"); return }
+    if (file.size > 10 * 1024 * 1024) { setError("File size must be less than 10MB"); return }
+    uploadResume(file)
   }
 
   const uploadResume = async (file: File) => {
-      setUploading(true)
-      setError("")
-      try {
-        const formData = new FormData()
-        formData.append("file", file)
-  
-        const res = await fetch("/api/upload/resume", {
-          method: "POST",
-          body: formData,
-        })
-  
-        const data = await res.json()
-  
-        if (!res.ok) {
-          setError(data.error || "Upload failed. Please try again.")
-          setUploading(false)
-          return
-        }
-
-        // Success
-        setFormData(prev => ({
-            ...prev,
-            resume: {
-                fileUrl: data.url,
-                fileName: file.name,
-                uploaded: true
-            }
-        }))
-      } catch (error) {
-        setError("Upload failed. Place try again.")
-        console.error(error)
-      } finally {
-        setUploading(false)
-      }
+    setUploading(true)
+    setError("")
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/upload/resume", { method: "POST", body: fd })
+      const result = await res.json()
+      if (!res.ok) { setError(result.error || "Upload failed. Please try again."); return }
+      setFormData(prev => ({ ...prev, resume: { fileUrl: result.url, fileName: file.name, uploaded: true } }))
+    } catch {
+      setError("Upload failed. Please try again.")
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleRemoveResume = () => {
-      setFormData(prev => ({ ...prev, resume: null }))
-      if (fileInputRef.current) fileInputRef.current.value = ""
+    setFormData(prev => ({ ...prev, resume: null }))
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
-  const handleNext = () => {
-      // Basic validation
-      if (formData.jobKeywords.length === 0) {
-          // Ideally show error, for now just return or alert
-          // alert("Please add at least one job keyword")
-          return
-      }
-      onNext(formData)
-  }
+  const canProceed = formData.jobKeywords.length > 0
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      
-      {/* 1. Job Keywords section */}
-      <div className="space-y-4">
-        <Label className="text-lg font-medium text-gray-900 flex items-center gap-2">
-           <Search className="w-5 h-5 text-blue-600" />
-           Job Keyword
-        </Label>
-        <div className="relative">
-            <Input 
-                placeholder="e.g. Frontend Developer" 
-                value={formData.jobKeywords[0] || ""}
-                onChange={(e) => setFormData(prev => ({ ...prev, jobKeywords: e.target.value ? [e.target.value] : [] }))}
-            />
-        </div>
-      </div>
+    <div className="space-y-8">
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* 2. Experience Level */}
-        <div className="space-y-4">
-            <Label className="text-lg font-medium text-gray-900 flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-blue-600" />
-                Years of Experience
-            </Label>
-            <Select 
-                value={formData.experienceLevel} 
-                onValueChange={(val) => setFormData(prev => ({ ...prev, experienceLevel: val }))}
-            >
-                <SelectTrigger>
-                    <SelectValue placeholder="Select experience..." />
-                </SelectTrigger>
-                <SelectContent>
-                    {EXPERIENCE_LEVELS.map(level => (
-                        <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        </div>
-
-        {/* 3. Date Posted Filter */}
-        <div className="space-y-4">
-            <Label className="text-lg font-medium text-gray-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-blue-600" />
-                Date Posted
-            </Label>
-             <Select 
-                value={formData.datePosted} 
-                onValueChange={(val) => setFormData(prev => ({ ...prev, datePosted: val }))}
-            >
-                <SelectTrigger>
-                    <SelectValue placeholder="Select date range..." />
-                </SelectTrigger>
-                <SelectContent>
-                    {DATE_POSTED_OPTIONS.map(opt => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        </div>
-      </div>
-
-      {/* 4. Resume Upload (Simplified & Integrated) */}
-      <div className="space-y-4">
-        <Label className="text-lg font-medium text-gray-900 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            Resume Upload
-        </Label>
-        
-        {!formData.resume ? (
-            <div 
-                className="border-2 border-dashed border-gray-200 rounded-xl p-8 transition-all hover:border-blue-400 hover:bg-blue-50/30 cursor-pointer group text-center"
-                onClick={() => fileInputRef.current?.click()}
-            >
-                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                    <Upload className="w-6 h-6" />
-                </div>
-                <p className="text-gray-900 font-medium">Click to upload or drag and drop</p>
-                <p className="text-sm text-gray-500 mt-1">PDF or DOCX (max 10MB)</p>
-                {uploading && <p className="text-sm text-blue-600 mt-2 font-medium">Uploading...</p>}
-            </div>
-        ) : (
-             <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-100 text-green-600 rounded-lg flex items-center justify-center">
-                        <FileText className="w-5 h-5" />
-                    </div>
-                    <div>
-                        <p className="font-medium text-gray-900">{formData.resume.fileName}</p>
-                        <p className="text-xs text-green-600 font-medium">Uploaded Successfully</p>
-                    </div>
-                </div>
-                <Button variant="ghost" size="icon" className="text-gray-400 hover:text-red-500" onClick={handleRemoveResume}>
-                    <X className="w-5 h-5" />
-                </Button>
-            </div>
-        )}
-         <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.doc,.docx"
-            onChange={handleFileSelect}
-            className="hidden"
-            disabled={uploading}
+      {/* Section: Job Keyword */}
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
+            <Search className="h-3.5 w-3.5" />
+          </span>
+          Job Keyword
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. Frontend Developer, React Engineer…"
+          value={formData.jobKeywords[0] || ""}
+          onChange={(e) => setFormData(prev => ({ ...prev, jobKeywords: e.target.value ? [e.target.value] : [] }))}
+          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
         />
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        <p className="text-xs text-gray-400">Enter the role you're applying for. We'll use this to find matching job posts.</p>
       </div>
 
-      {/* Footer / Navigation */}
-      <div className="pt-6 flex justify-end">
-          <Button 
-            size="lg" 
-            onClick={handleNext} 
-            className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px] shadow-lg shadow-blue-600/20"
-            disabled={formData.jobKeywords.length === 0}
+      {/* Section: Experience + Date */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
+              <Briefcase className="h-3.5 w-3.5" />
+            </span>
+            Years of Experience
+          </label>
+          <NativeSelect
+            value={formData.experienceLevel}
+            onChange={(v) => setFormData(prev => ({ ...prev, experienceLevel: v }))}
+            options={EXPERIENCE_LEVELS}
+            placeholder="Select level…"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
+              <Calendar className="h-3.5 w-3.5" />
+            </span>
+            Date Posted
+          </label>
+          <NativeSelect
+            value={formData.datePosted}
+            onChange={(v) => setFormData(prev => ({ ...prev, datePosted: v }))}
+            options={DATE_POSTED_OPTIONS}
+            placeholder="Select range…"
+          />
+        </div>
+      </div>
+
+      {/* Section: Resume Upload */}
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
+            <FileText className="h-3.5 w-3.5" />
+          </span>
+          Resume
+          <span className="text-xs font-normal text-gray-400">(optional)</span>
+        </label>
+
+        {!formData.resume ? (
+          <div
+            onClick={() => !uploading && fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer group
+              ${uploading ? "border-indigo-300 bg-indigo-50/40" : "border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30"}`}
           >
-            Next Step
-          </Button>
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 transition-transform
+              ${uploading ? "bg-indigo-100 text-indigo-500" : "bg-gray-100 text-gray-400 group-hover:bg-indigo-100 group-hover:text-indigo-500 group-hover:scale-110"}`}>
+              {uploading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Upload className="h-6 w-6" />}
+            </div>
+            {uploading ? (
+              <p className="text-sm font-medium text-indigo-600">Uploading…</p>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-gray-700">Click to upload your resume</p>
+                <p className="text-xs text-gray-400 mt-1">PDF or DOCX — max 10 MB</p>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+            <div className="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{formData.resume.fileName}</p>
+              <p className="text-xs text-emerald-600 font-medium">Uploaded successfully</p>
+            </div>
+            <button
+              onClick={handleRemoveResume}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileSelect} className="hidden" disabled={uploading} />
+        {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+      </div>
+
+      {/* Navigation */}
+      <div className="flex justify-end pt-4 border-t border-gray-100">
+        <button
+          onClick={() => canProceed && onNext(formData)}
+          disabled={!canProceed}
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors cursor-pointer shadow-sm shadow-indigo-200"
+        >
+          Next Step
+        </button>
       </div>
 
     </div>

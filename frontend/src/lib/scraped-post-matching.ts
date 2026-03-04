@@ -42,59 +42,63 @@ export class ScrapedPostMatchingService {
         return null
       }
 
-      // Simple matching logic based on keywords
+      // Matching logic based on keywords — all weights are proportional so scores vary.
       const postText = post.text.toLowerCase()
       let matchScore = 0
 
-      // Check skill matches (40% weight)
+      // ── Skills (40% weight) — proportional to fraction of skills found ──────
       if (user.skills && user.skills.length > 0) {
         const matchingSkills = user.skills.filter((skill) =>
           postText.includes(skill.toLowerCase())
         )
-        const skillScore = (matchingSkills.length / user.skills.length) * 40
-        matchScore += skillScore
+        matchScore += (matchingSkills.length / user.skills.length) * 40
       }
 
-      // Check job title matches (30% weight)
+      // ── Job titles (30% weight) — proportional word-level matching ───────────
+      // Each title is split into words; partial matches get partial credit.
+      // We take the best-scoring title across all preferred titles.
       if (user.preferred_job_titles && user.preferred_job_titles.length > 0) {
-        const matchingTitles = user.preferred_job_titles.filter((title) =>
-          postText.includes(title.toLowerCase())
-        )
-        if (matchingTitles.length > 0) {
-          matchScore += 30
+        let bestTitleScore = 0
+        for (const title of user.preferred_job_titles) {
+          const words = title.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
+          if (words.length === 0) continue
+          const matched = words.filter((w) => postText.includes(w))
+          const score = (matched.length / words.length) * 30
+          if (score > bestTitleScore) bestTitleScore = score
         }
+        matchScore += bestTitleScore
       }
 
-      // Check location matches (15% weight)
+      // ── Location (15% weight) ─────────────────────────────────────────────────
       if (user.preferred_locations && user.preferred_locations.length > 0) {
-        const matchingLocations = user.preferred_locations.filter((location) =>
-          postText.includes(location.toLowerCase())
+        const matchingLocations = user.preferred_locations.filter((loc) =>
+          postText.includes(loc.toLowerCase())
         )
         if (matchingLocations.length > 0) {
-          matchScore += 15
+          // Proportional: more matching locations = higher score
+          matchScore += (matchingLocations.length / user.preferred_locations.length) * 15
         } else if (user.remote_work_preferred && postText.includes('remote')) {
           matchScore += 15
         }
       }
 
-      // Check job type matches (10% weight)
+      // ── Job type (10% weight) — proportional ─────────────────────────────────
       if (user.job_types && user.job_types.length > 0) {
         const matchingTypes = user.job_types.filter((type) =>
           postText.includes(type.toLowerCase())
         )
         if (matchingTypes.length > 0) {
-          matchScore += 10
+          matchScore += (matchingTypes.length / user.job_types.length) * 10
         }
       }
 
-      // Check for email address
+      // ── Email check ───────────────────────────────────────────────────────────
       const { extractEmails } = await import('./utils')
       const emails = extractEmails(postText)
 
       // HARD FILTER 1: post must contain at least one email address
       if (emails.length === 0) {
         console.log(`[Matching] Skipping post ${scrapedPostId} — no email found`)
-        // Make sure it stays hidden if it somehow got shown_to_user: true
         await prisma.scrapedPostMatch.updateMany({
           where: { user_id: userId, scraped_post_id: scrapedPostId },
           data: { shown_to_user: false, shown_at: null },
@@ -104,6 +108,9 @@ export class ScrapedPostMatchingService {
 
       // Small bonus for having a contactable email
       matchScore += 5
+
+      // Round to nearest integer so the DB stores a clean number
+      matchScore = Math.round(matchScore)
 
       // Determine match quality
       let matchQuality: 'good' | 'medium' | 'bad'
@@ -289,8 +296,8 @@ export class ScrapedPostMatchingService {
 
       if (keywords.length === 0) return { found: 0, qualified: 0 }
 
-      // 3-day recency window — pool posts older than 3 days are likely stale
-      const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+      // 7-day recency window — pool posts older than 7 days are likely stale
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
       // Fetch posts from the global pool that:
       //  • have an email address (text contains '@')
@@ -308,9 +315,10 @@ export class ScrapedPostMatchingService {
         select: { id: true, text: true },
       })
 
-      // Only use keywords that are at least 6 characters to avoid single generic words
-      // (e.g. "dev", "js") matching completely irrelevant posts
-      const meaningfulKeywords = keywords.filter((kw) => kw.length >= 6)
+      // Only use keywords that are at least 4 characters to avoid 2-3 char noise words
+      // (e.g. "js", "ai") while still allowing short but meaningful tech terms like
+      // "react", "node", "java", "rust", etc.
+      const meaningfulKeywords = keywords.filter((kw) => kw.length >= 4)
       if (meaningfulKeywords.length === 0) return { found: 0, qualified: 0 }
 
       // Filter in-memory: post must contain ALL words of at least one keyword phrase
@@ -444,6 +452,7 @@ export class ScrapedPostMatchingService {
       console.error("AI Enrichment Failed:", e)
     }
   }
+
 }
 
 

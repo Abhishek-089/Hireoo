@@ -153,6 +153,13 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@layer base {
+  button, [role="button"], a, label[for], select,
+  input[type="submit"], input[type="button"], input[type="reset"] {
+    cursor: pointer;
+  }
+}
+
 .animate-float { animation: float 6s ease-in-out infinite; }
 .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
 .animate-gradient-shift { animation: gradient-shift 8s ease infinite; background-size: 200% 200%; }

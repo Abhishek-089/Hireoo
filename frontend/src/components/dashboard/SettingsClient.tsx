@@ -2,32 +2,14 @@
 
 import { useState, useCallback } from "react"
 import { signOut } from "next-auth/react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  User,
-  Briefcase,
-  MapPin,
-  X,
-  Plus,
-  Save,
-  CheckCircle2,
-  Loader2,
-  LogOut,
-  Mail,
-  Shield,
-  Wrench,
+  User, Briefcase, MapPin, X, Plus, Save, CheckCircle2,
+  Loader2, LogOut, Mail, Shield, Wrench,
 } from "lucide-react"
 
 interface SettingsData {
@@ -49,18 +31,18 @@ interface SettingsData {
 }
 
 const EXPERIENCE_LEVELS = [
-  { value: "entry", label: "Entry Level (0-2 years)" },
-  { value: "junior", label: "Junior (2-4 years)" },
-  { value: "mid", label: "Mid-Level (4-7 years)" },
-  { value: "senior", label: "Senior (7-10 years)" },
-  { value: "lead", label: "Lead/Principal (10+ years)" },
-  { value: "executive", label: "Executive/C-Suite" },
+  { value: "entry", label: "Entry Level (0–2 years)" },
+  { value: "junior", label: "Junior (2–4 years)" },
+  { value: "mid", label: "Mid-Level (4–7 years)" },
+  { value: "senior", label: "Senior (7–10 years)" },
+  { value: "lead", label: "Lead / Principal (10+ years)" },
+  { value: "executive", label: "Executive / C-Suite" },
 ]
 
 const JOB_TYPES = [
   { id: "full-time", label: "Full-time" },
   { id: "part-time", label: "Part-time" },
-  { id: "contract", label: "Contract/Freelance" },
+  { id: "contract", label: "Contract" },
   { id: "internship", label: "Internship" },
   { id: "remote", label: "Remote" },
 ]
@@ -79,6 +61,77 @@ const POPULAR_JOB_TITLES = [
   "DevOps Engineer", "Data Scientist", "Data Engineer",
   "Machine Learning Engineer", "QA Engineer", "Technical Writer",
 ]
+
+function Section({ icon: Icon, title, description, children }: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-start gap-3">
+        <div className="p-2 rounded-xl bg-indigo-50 shrink-0">
+          <Icon className="h-4 w-4 text-indigo-600" />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+          {description && <p className="text-xs text-gray-400 mt-0.5">{description}</p>}
+        </div>
+      </div>
+      <div className="px-6 py-5">{children}</div>
+    </div>
+  )
+}
+
+function TagInput({
+  tags, onAdd, onRemove, placeholder, inputValue, setInputValue,
+}: {
+  tags: string[]
+  onAdd: (v: string) => void
+  onRemove: (v: string) => void
+  placeholder: string
+  inputValue: string
+  setInputValue: (v: string) => void
+}) {
+  return (
+    <div className="space-y-3">
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <span key={tag}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-medium">
+              {tag}
+              <button onClick={() => onRemove(tag)} className="hover:text-indigo-900 cursor-pointer">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          placeholder={placeholder}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && inputValue.trim()) {
+              onAdd(inputValue)
+              setInputValue("")
+            }
+          }}
+          className="rounded-xl border-gray-200 text-sm h-9 focus:border-indigo-400 focus:ring-indigo-100"
+        />
+        <button
+          onClick={() => { if (inputValue.trim()) { onAdd(inputValue); setInputValue("") } }}
+          className="px-3 h-9 rounded-xl border border-gray-200 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer"
+        >
+          <Plus className="h-4 w-4 text-gray-500" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export function SettingsClient({ initialData }: { initialData: SettingsData }) {
   const [data, setData] = useState(initialData)
@@ -106,10 +159,7 @@ export function SettingsClient({ initialData }: { initialData: SettingsData }) {
           job_types: data.jobTypes,
         }),
       })
-      if (res.ok) {
-        setSaved(true)
-        setTimeout(() => setSaved(false), 3000)
-      }
+      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000) }
     } catch (e) {
       console.error("Save failed:", e)
     } finally {
@@ -122,11 +172,9 @@ export function SettingsClient({ initialData }: { initialData: SettingsData }) {
     if (!trimmed || data[field].includes(trimmed)) return
     setData((prev) => ({ ...prev, [field]: [...prev[field], trimmed] }))
   }
-
   const removeTag = (field: "skills" | "preferredJobTitles" | "preferredLocations", value: string) => {
     setData((prev) => ({ ...prev, [field]: prev[field].filter((v) => v !== value) }))
   }
-
   const toggleJobType = (typeId: string) => {
     setData((prev) => ({
       ...prev,
@@ -136,377 +184,201 @@ export function SettingsClient({ initialData }: { initialData: SettingsData }) {
     }))
   }
 
+  const inputClass = "rounded-xl border-gray-200 text-sm h-9 focus:border-indigo-400 focus:ring-indigo-100"
+
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-5 max-w-2xl">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-          <p className="mt-1 text-gray-500">
-            Manage your profile and job preferences
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage your profile and job search preferences</p>
         </div>
-        <Button onClick={handleSave} disabled={saving} className="gap-2">
-          {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : saved ? (
-            <CheckCircle2 className="h-4 w-4" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          {saving ? "Saving..." : saved ? "Saved" : "Save Changes"}
-        </Button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors cursor-pointer shadow-sm shadow-indigo-200"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" />
+            : saved ? <CheckCircle2 className="h-4 w-4" />
+            : <Save className="h-4 w-4" />}
+          {saving ? "Saving…" : saved ? "Saved!" : "Save Changes"}
+        </button>
       </div>
 
-      {/* Profile Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <User className="h-5 w-5 text-gray-500" />
-            <CardTitle>Profile</CardTitle>
+      {/* Profile */}
+      <Section icon={User} title="Profile" description="Your basic information">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-gray-700">Full Name</Label>
+            <Input className={inputClass} value={data.name}
+              onChange={(e) => setData((p) => ({ ...p, name: e.target.value }))} placeholder="Your name" />
           </div>
-          <CardDescription>Your basic information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={data.name}
-                onChange={(e) => setData((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Your name"
-              />
-            </div>
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" value={data.email} disabled className="bg-gray-50" />
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-gray-700">Email</Label>
+            <Input className={inputClass + " bg-gray-50"} value={data.email} disabled />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="role">Current Role</Label>
-              <Input
-                id="role"
-                value={data.currentRole}
-                onChange={(e) => setData((p) => ({ ...p, currentRole: e.target.value }))}
-                placeholder="e.g. Software Engineer"
-              />
-            </div>
-            <div>
-              <Label htmlFor="experience">Experience Level</Label>
-              <Select
-                value={data.experienceLevel}
-                onValueChange={(v) => setData((p) => ({ ...p, experienceLevel: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  {EXPERIENCE_LEVELS.map((l) => (
-                    <SelectItem key={l.value} value={l.value}>
-                      {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-gray-700">Current Role</Label>
+            <Input className={inputClass} value={data.currentRole}
+              onChange={(e) => setData((p) => ({ ...p, currentRole: e.target.value }))} placeholder="e.g. Software Engineer" />
           </div>
-        </CardContent>
-      </Card>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-gray-700">Experience Level</Label>
+            <Select value={data.experienceLevel} onValueChange={(v) => setData((p) => ({ ...p, experienceLevel: v }))}>
+              <SelectTrigger className={inputClass}>
+                <SelectValue placeholder="Select level" />
+              </SelectTrigger>
+              <SelectContent>
+                {EXPERIENCE_LEVELS.map((l) => (
+                  <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Section>
 
-      {/* Skills Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-gray-500" />
-            <CardTitle>Skills</CardTitle>
-          </div>
-          <CardDescription>
-            Your technical and professional skills. These are used to match you with relevant jobs.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {data.skills.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {data.skills.map((skill) => (
-                <Badge key={skill} variant="secondary" className="gap-1 pr-1">
-                  {skill}
-                  <button
-                    onClick={() => removeTag("skills", skill)}
-                    className="ml-1 rounded-full p-0.5 hover:bg-gray-300/50"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add a skill..."
-              value={newSkill}
-              onChange={(e) => setNewSkill(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  addTag("skills", newSkill)
-                  setNewSkill("")
-                }
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                addTag("skills", newSkill)
-                setNewSkill("")
-              }}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
+      {/* Skills */}
+      <Section icon={Wrench} title="Skills" description="Used to match you with relevant jobs">
+        <div className="space-y-4">
+          <TagInput
+            tags={data.skills} placeholder="Add a skill…"
+            inputValue={newSkill} setInputValue={setNewSkill}
+            onAdd={(v) => { addTag("skills", v); setNewSkill("") }}
+            onRemove={(v) => removeTag("skills", v)}
+          />
           <div>
-            <p className="text-xs text-gray-500 mb-2">Quick add:</p>
+            <p className="text-xs text-gray-400 mb-2">Quick add</p>
             <div className="flex flex-wrap gap-1.5">
-              {POPULAR_SKILLS.filter((s) => !data.skills.includes(s))
-                .slice(0, 15)
-                .map((skill) => (
-                  <button
-                    key={skill}
-                    onClick={() => addTag("skills", skill)}
-                    className="px-2.5 py-1 text-xs bg-gray-50 hover:bg-blue-50 hover:text-blue-700 rounded-md border border-gray-200 hover:border-blue-300 transition-colors"
-                  >
-                    + {skill}
-                  </button>
-                ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Job Preferences Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5 text-gray-500" />
-            <CardTitle>Job Preferences</CardTitle>
-          </div>
-          <CardDescription>
-            What kind of roles and locations you're looking for
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Preferred Titles */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Preferred Job Titles</Label>
-            {data.preferredJobTitles.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {data.preferredJobTitles.map((title) => (
-                  <Badge key={title} variant="secondary" className="gap-1 pr-1">
-                    {title}
-                    <button
-                      onClick={() => removeTag("preferredJobTitles", title)}
-                      className="ml-1 rounded-full p-0.5 hover:bg-gray-300/50"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add a job title..."
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    addTag("preferredJobTitles", newTitle)
-                    setNewTitle("")
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  addTag("preferredJobTitles", newTitle)
-                  setNewTitle("")
-                }}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {POPULAR_JOB_TITLES.filter((t) => !data.preferredJobTitles.includes(t))
-                .slice(0, 8)
-                .map((title) => (
-                  <button
-                    key={title}
-                    onClick={() => addTag("preferredJobTitles", title)}
-                    className="px-2.5 py-1 text-xs bg-gray-50 hover:bg-blue-50 hover:text-blue-700 rounded-md border border-gray-200 hover:border-blue-300 transition-colors"
-                  >
-                    + {title}
-                  </button>
-                ))}
-            </div>
-          </div>
-
-          {/* Preferred Locations */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Preferred Locations</Label>
-            {data.preferredLocations.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {data.preferredLocations.map((loc) => (
-                  <Badge key={loc} variant="secondary" className="gap-1 pr-1">
-                    <MapPin className="h-3 w-3" />
-                    {loc}
-                    <button
-                      onClick={() => removeTag("preferredLocations", loc)}
-                      className="ml-1 rounded-full p-0.5 hover:bg-gray-300/50"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add a location..."
-                value={newLocation}
-                onChange={(e) => setNewLocation(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    addTag("preferredLocations", newLocation)
-                    setNewLocation("")
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  addTag("preferredLocations", newLocation)
-                  setNewLocation("")
-                }}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <Checkbox
-                id="remote-pref"
-                checked={data.remoteWorkPreferred}
-                onCheckedChange={(checked) =>
-                  setData((p) => ({ ...p, remoteWorkPreferred: !!checked }))
-                }
-              />
-              <Label htmlFor="remote-pref" className="text-sm text-gray-700 cursor-pointer">
-                I prefer remote work opportunities
-              </Label>
-            </div>
-          </div>
-
-          {/* Job Types */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Job Types</Label>
-            <div className="flex flex-wrap gap-4">
-              {JOB_TYPES.map((type) => (
-                <div key={type.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`jt-${type.id}`}
-                    checked={data.jobTypes.includes(type.id)}
-                    onCheckedChange={() => toggleJobType(type.id)}
-                  />
-                  <Label htmlFor={`jt-${type.id}`} className="text-sm text-gray-700 cursor-pointer">
-                    {type.label}
-                  </Label>
-                </div>
+              {POPULAR_SKILLS.filter((s) => !data.skills.includes(s)).slice(0, 16).map((skill) => (
+                <button key={skill} onClick={() => addTag("skills", skill)}
+                  className="px-2.5 py-1 text-xs rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors cursor-pointer">
+                  + {skill}
+                </button>
               ))}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      {/* Account Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-gray-500" />
-            <CardTitle>Account</CardTitle>
-          </div>
-          <CardDescription>Account status and integrations</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200">
-              <Mail className={`h-5 w-5 ${data.gmailConnected ? "text-green-600" : "text-gray-400"}`} />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Gmail</p>
-                <p className="text-xs text-gray-500">
-                  {data.gmailConnected ? "Connected" : "Not connected"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200">
-              <CheckCircle2
-                className={`h-5 w-5 ${data.resumeUploaded ? "text-green-600" : "text-gray-400"}`}
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Resume</p>
-                <p className="text-xs text-gray-500">
-                  {data.resumeUploaded ? "Uploaded" : "Not uploaded"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200">
-              <Wrench
-                className={`h-5 w-5 ${data.extensionInstalled ? "text-green-600" : "text-gray-400"}`}
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Extension</p>
-                <p className="text-xs text-gray-500">
-                  {data.extensionInstalled ? "Installed" : "Not installed"}
-                </p>
-              </div>
+      {/* Job Preferences */}
+      <Section icon={Briefcase} title="Job Preferences" description="Roles and locations you're targeting">
+        <div className="space-y-6">
+
+          {/* Titles */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-700">Preferred Job Titles</p>
+            <TagInput
+              tags={data.preferredJobTitles} placeholder="Add a job title…"
+              inputValue={newTitle} setInputValue={setNewTitle}
+              onAdd={(v) => { addTag("preferredJobTitles", v); setNewTitle("") }}
+              onRemove={(v) => removeTag("preferredJobTitles", v)}
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {POPULAR_JOB_TITLES.filter((t) => !data.preferredJobTitles.includes(t)).slice(0, 8).map((title) => (
+                <button key={title} onClick={() => addTag("preferredJobTitles", title)}
+                  className="px-2.5 py-1 text-xs rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors cursor-pointer">
+                  + {title}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="text-xs text-gray-400 pt-2">
-            Member since {new Date(data.createdAt).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
+          {/* Locations */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-700">Preferred Locations</p>
+            <TagInput
+              tags={data.preferredLocations} placeholder="Add a city or country…"
+              inputValue={newLocation} setInputValue={setNewLocation}
+              onAdd={(v) => { addTag("preferredLocations", v); setNewLocation("") }}
+              onRemove={(v) => removeTag("preferredLocations", v)}
+            />
+            <label className="flex items-center gap-2.5 cursor-pointer group">
+              <div
+                onClick={() => setData((p) => ({ ...p, remoteWorkPreferred: !p.remoteWorkPreferred }))}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer ${data.remoteWorkPreferred ? 'bg-indigo-600' : 'bg-gray-200'}`}
+              >
+                <div className={`mt-0.5 ml-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${data.remoteWorkPreferred ? 'translate-x-4' : ''}`} />
+              </div>
+              <span className="text-xs text-gray-600 group-hover:text-gray-900">I prefer remote work</span>
+            </label>
           </div>
 
-          <div className="pt-4 border-t border-gray-100">
-            <Button
-              variant="outline"
-              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 gap-2"
+          {/* Job types */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-700">Job Types</p>
+            <div className="flex flex-wrap gap-2">
+              {JOB_TYPES.map((type) => {
+                const active = data.jobTypes.includes(type.id)
+                return (
+                  <button key={type.id} onClick={() => toggleJobType(type.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
+                      active
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                    }`}>
+                    {type.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* Account */}
+      <Section icon={Shield} title="Account" description="Integrations and account status">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { icon: Mail, label: "Gmail", connected: data.gmailConnected },
+              { icon: CheckCircle2, label: "Resume", connected: data.resumeUploaded },
+              { icon: Wrench, label: "Extension", connected: data.extensionInstalled },
+            ].map(({ icon: Icon, label, connected }) => (
+              <div key={label} className={`flex items-center gap-3 p-3.5 rounded-xl border ${connected ? 'border-emerald-100 bg-emerald-50/50' : 'border-gray-100 bg-gray-50/50'}`}>
+                <div className={`p-2 rounded-lg ${connected ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                  <Icon className={`h-4 w-4 ${connected ? 'text-emerald-600' : 'text-gray-400'}`} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-900">{label}</p>
+                  <p className={`text-[11px] font-medium ${connected ? 'text-emerald-600' : 'text-gray-400'}`}>
+                    {connected ? "Connected" : "Not connected"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-gray-400">
+            Member since {new Date(data.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+          </p>
+
+          <div className="pt-3 border-t border-gray-100">
+            <button
               onClick={() => signOut({ callbackUrl: "/" })}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors cursor-pointer"
             >
               <LogOut className="h-4 w-4" />
               Sign Out
-            </Button>
+            </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      {/* Bottom Save Bar */}
-      <div className="flex justify-end pb-8">
-        <Button onClick={handleSave} disabled={saving} className="gap-2">
-          {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : saved ? (
-            <CheckCircle2 className="h-4 w-4" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          {saving ? "Saving..." : saved ? "Saved" : "Save Changes"}
-        </Button>
+      {/* Bottom save */}
+      <div className="flex justify-end pb-6">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors cursor-pointer shadow-sm"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" />
+            : saved ? <CheckCircle2 className="h-4 w-4" />
+            : <Save className="h-4 w-4" />}
+          {saving ? "Saving…" : saved ? "Saved!" : "Save Changes"}
+        </button>
       </div>
     </div>
   )
