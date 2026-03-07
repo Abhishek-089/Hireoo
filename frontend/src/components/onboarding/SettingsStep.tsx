@@ -1,23 +1,50 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Chrome, Shield, ExternalLink, Loader2, Sparkles, Rocket, Zap } from "lucide-react"
+import {
+  Check, Chrome, ExternalLink, Loader2, Sparkles,
+  Zap, Briefcase, FileText, Mail, Search, Pencil,
+} from "lucide-react"
 import { useExtensionDetection } from "@/hooks/useExtensionDetection"
 import { EXTENSION_CONFIG } from "@/config/extension"
 
 interface SettingsStepProps {
-  data: any
+  data: any   // receives full onboardingData: { searchInfo, emailTemplate, settings }
   onNext: (data: any) => void
   onBack: () => void
   isFirstStep: boolean
   isLastStep: boolean
 }
 
+const JOB_TYPE_LABELS: Record<string, string> = {
+  "freelance":  "Freelance",
+  "full-time":  "Full Time",
+  "internship": "Internship",
+}
+
+const EXP_LABELS: Record<string, string> = {
+  "0-1":  "0–1 Years (Entry Level)",
+  "1-3":  "1–3 Years (Junior)",
+  "3-5":  "3–5 Years (Mid-Level)",
+  "5-10": "5–10 Years (Senior)",
+  "10+":  "10+ Years (Lead / Architect)",
+}
+
 export function SettingsStep({ data, onNext, onBack }: SettingsStepProps) {
   const { isInstalled, isChecking } = useExtensionDetection()
   const [isStarting, setIsStarting] = useState(false)
 
-  const handleStartSearching = async () => {
+  const search   = data?.searchInfo   || {}
+  const template = data?.emailTemplate || {}
+
+  const jobType    = JOB_TYPE_LABELS[search.jobType]        || search.jobType   || "—"
+  const keyword    = search.jobKeywords?.[0]                 || "—"
+  const experience = EXP_LABELS[search.experienceLevel]     || search.experienceLevel || "—"
+  const hasResume  = !!search.resume?.uploaded
+  const emailTone  = template.templateName                   || "—"
+  const subject    = template.subject                        || "—"
+
+  const handleStart = async () => {
     setIsStarting(true)
     if (isInstalled) {
       try {
@@ -37,99 +64,125 @@ export function SettingsStep({ data, onNext, onBack }: SettingsStepProps) {
   }
 
   return (
-    <div className="space-y-8 max-w-2xl mx-auto">
+    <div className="space-y-5">
 
-      {/* Hero */}
-      <div className="text-center space-y-3">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-indigo-200">
-          <Rocket className="h-8 w-8" />
+      {/* Heading */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">Review your setup</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Everything look good? Hit Start to find your jobs.</p>
         </div>
-        <h2 className="text-xl font-bold text-gray-900">You're all set!</h2>
-        <p className="text-sm text-gray-500 max-w-md mx-auto">
-          We'll search our database for job posts that match your profile and apply on your behalf.
-        </p>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium transition cursor-pointer"
+        >
+          <Pencil className="h-3.5 w-3.5" /> Edit
+        </button>
       </div>
 
-      {/* Feature cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Review cards */}
+      <div className="grid grid-cols-2 gap-3">
 
-        {/* Smart matching */}
-        <div className="p-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
-            <Zap className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">Smart Job Matching</h3>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              Our AI scans thousands of job posts and scores them against your skills, title, and preferences.
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-600">
-            <Check className="h-3.5 w-3.5" /> Active
+        {/* Job Search Preferences */}
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Job Preferences</p>
+          <div className="space-y-2.5">
+            <Row icon={<Zap className="h-3.5 w-3.5 text-indigo-500" />} label="Job Type" value={jobType} />
+            <Row icon={<Search className="h-3.5 w-3.5 text-indigo-500" />} label="Keyword" value={keyword} />
+            <Row icon={<Briefcase className="h-3.5 w-3.5 text-indigo-500" />} label="Experience" value={experience} />
+            <Row
+              icon={<FileText className="h-3.5 w-3.5 text-indigo-500" />}
+              label="Resume"
+              value={
+                hasResume
+                  ? <span className="text-emerald-600 font-semibold flex items-center gap-1"><Check className="h-3 w-3" />Uploaded</span>
+                  : <span className="text-gray-400 italic">Not uploaded</span>
+              }
+            />
           </div>
         </div>
 
-        {/* Extension (optional) */}
-        <div className="p-5 rounded-2xl border border-amber-100 bg-amber-50/50 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
-            <Chrome className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">Browser Extension</h3>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              Optional — get real-time results from LinkedIn directly.
-            </p>
-          </div>
-          {isChecking ? (
-            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…
+        {/* Email Style */}
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Email Style</p>
+          <div className="space-y-2.5">
+            <Row icon={<Mail className="h-3.5 w-3.5 text-indigo-500" />} label="Tone" value={emailTone} />
+            <div className="space-y-1">
+              <p className="text-[11px] text-gray-400 font-medium">Subject preview</p>
+              <p className="text-xs text-gray-700 leading-relaxed bg-white border border-gray-200 rounded-lg px-3 py-2 break-words">
+                {subject}
+              </p>
             </div>
-          ) : isInstalled ? (
-            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-              <Check className="h-3.5 w-3.5" /> Installed &amp; ready
+          </div>
+
+          {/* Extension */}
+          <div className="pt-2 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
+                <Chrome className="h-3.5 w-3.5" /> Chrome Extension
+              </div>
+              {isChecking ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+              ) : isInstalled ? (
+                <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3 w-3" /> Ready
+                </span>
+              ) : (
+                <button
+                  onClick={() => window.open(EXTENSION_CONFIG.storeUrl, "_blank", "noopener,noreferrer")}
+                  className="text-[11px] font-semibold text-amber-600 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <ExternalLink className="h-3 w-3" /> Install
+                </button>
+              )}
             </div>
-          ) : (
-            <button
-              onClick={() => window.open(EXTENSION_CONFIG.storeUrl, "_blank", "noopener,noreferrer")}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900 transition cursor-pointer"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> Install extension
-            </button>
-          )}
+            {!isInstalled && !isChecking && (
+              <p className="text-[11px] text-gray-400 mt-1">Optional — scrapes live LinkedIn jobs directly.</p>
+            )}
+          </div>
         </div>
 
       </div>
 
       {/* CTA */}
-      <div className="flex flex-col items-center gap-3 pt-4 border-t border-gray-100">
-        <button
-          onClick={handleStartSearching}
-          disabled={isStarting}
-          className="flex items-center gap-2.5 px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all cursor-pointer shadow-lg shadow-indigo-200 group"
-        >
-          {isStarting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Starting…
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4 group-hover:scale-110 transition-transform" />
-              Start Searching Jobs
-            </>
-          )}
-        </button>
-        <p className="text-xs text-gray-400">
-          We'll match you with the best-fit posts from our database automatically.
-        </p>
+      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
         <button
           onClick={onBack}
-          className="text-sm text-gray-400 hover:text-gray-700 font-medium transition cursor-pointer"
+          className="px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition cursor-pointer"
         >
-          Go back
+          Back
+        </button>
+        <button
+          onClick={handleStart}
+          disabled={isStarting}
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold transition cursor-pointer shadow-sm shadow-indigo-200"
+        >
+          {isStarting
+            ? <><Loader2 className="h-4 w-4 animate-spin" /> Starting…</>
+            : <><Sparkles className="h-4 w-4" /> Start Searching Jobs</>
+          }
         </button>
       </div>
 
+    </div>
+  )
+}
+
+// Small helper row component
+function Row({
+  icon, label, value,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[11px] text-gray-400 leading-none">{label}</p>
+        <div className="text-xs font-semibold text-gray-800 mt-0.5 truncate">{value}</div>
+      </div>
     </div>
   )
 }

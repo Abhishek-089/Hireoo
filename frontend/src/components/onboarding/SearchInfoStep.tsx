@@ -1,7 +1,10 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Upload, FileText, X, Search, Briefcase, Calendar, ChevronDown, Loader2, CheckCircle2 } from "lucide-react"
+import {
+  Upload, FileText, X, Search, Briefcase,
+  ChevronDown, Loader2, CheckCircle2, Zap,
+} from "lucide-react"
 
 interface SearchInfoStepProps {
   data: any
@@ -11,18 +14,18 @@ interface SearchInfoStepProps {
   isLastStep: boolean
 }
 
-const EXPERIENCE_LEVELS = [
-  { value: "0-1", label: "0–1 Years (Entry Level)" },
-  { value: "1-3", label: "1–3 Years (Junior)" },
-  { value: "3-5", label: "3–5 Years (Mid-Level)" },
-  { value: "5-10", label: "5–10 Years (Senior)" },
-  { value: "10+", label: "10+ Years (Lead / Architect)" },
+const JOB_TYPE_OPTIONS = [
+  { value: "freelance",  label: "Freelance",  desc: "Project-based / contract work" },
+  { value: "full-time",  label: "Full Time",  desc: "Permanent employment" },
+  { value: "internship", label: "Internship", desc: "Short-term learning role" },
 ]
 
-const DATE_POSTED_OPTIONS = [
-  { value: "r86400", label: "Past 24 hours" },
-  { value: "r604800", label: "Past week" },
-  { value: "r2592000", label: "Past month" },
+const EXPERIENCE_LEVELS = [
+  { value: "0-1",  label: "0–1 Years (Entry Level)" },
+  { value: "1-3",  label: "1–3 Years (Junior)" },
+  { value: "3-5",  label: "3–5 Years (Mid-Level)" },
+  { value: "5-10", label: "5–10 Years (Senior)" },
+  { value: "10+",  label: "10+ Years (Lead / Architect)" },
 ]
 
 function NativeSelect({
@@ -55,21 +58,31 @@ function NativeSelect({
 
 export function SearchInfoStep({ data, onNext, isFirstStep }: SearchInfoStepProps) {
   const [formData, setFormData] = useState({
-    jobKeywords: data?.jobKeywords || [],
+    jobType:         data?.jobType         || "freelance",
+    jobKeywords:     data?.jobKeywords     || [],
     experienceLevel: data?.experienceLevel || "",
-    datePosted: data?.datePosted || "r604800",
-    resume: data?.resume || null,
+    resume:          data?.resume          || null,
   })
-  const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState("")
+  const [uploading, setUploading]   = useState(false)
+  const [error, setError]           = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
     if (!file) return
-    const allowed = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
-    if (!allowed.includes(file.type)) { setError("Please select a PDF or Word document (.doc, .docx)"); return }
-    if (file.size > 10 * 1024 * 1024) { setError("File size must be less than 10MB"); return }
+    const allowed = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]
+    if (!allowed.includes(file.type)) {
+      setError("Please select a PDF or Word document (.doc, .docx)")
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File size must be less than 10 MB")
+      return
+    }
     uploadResume(file)
   }
 
@@ -79,10 +92,16 @@ export function SearchInfoStep({ data, onNext, isFirstStep }: SearchInfoStepProp
     try {
       const fd = new FormData()
       fd.append("file", file)
-      const res = await fetch("/api/upload/resume", { method: "POST", body: fd })
+      const res    = await fetch("/api/upload/resume", { method: "POST", body: fd })
       const result = await res.json()
-      if (!res.ok) { setError(result.error || "Upload failed. Please try again."); return }
-      setFormData(prev => ({ ...prev, resume: { fileUrl: result.url, fileName: file.name, uploaded: true } }))
+      if (!res.ok) {
+        setError(result.error || "Upload failed. Please try again.")
+        return
+      }
+      setFormData(prev => ({
+        ...prev,
+        resume: { fileUrl: result.url, fileName: file.name, uploaded: true },
+      }))
     } catch {
       setError("Upload failed. Please try again.")
     } finally {
@@ -95,12 +114,48 @@ export function SearchInfoStep({ data, onNext, isFirstStep }: SearchInfoStepProp
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
-  const canProceed = formData.jobKeywords.length > 0
+  const canProceed = formData.jobKeywords.length > 0 && formData.jobType
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
 
-      {/* Section: Job Keyword */}
+      {/* ── 1. Job Type ──────────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
+            <Zap className="h-3.5 w-3.5" />
+          </span>
+          Job Type
+        </label>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {JOB_TYPE_OPTIONS.map((type) => {
+            const active = formData.jobType === type.value
+            return (
+              <button
+                key={type.value}
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, jobType: type.value }))}
+                className={`relative flex flex-col items-start gap-0.5 rounded-xl border px-4 py-3 text-left transition-all cursor-pointer
+                  ${active
+                    ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200"
+                    : "border-gray-200 bg-gray-50 hover:border-indigo-300 hover:bg-indigo-50/40"
+                  }`}
+              >
+                <span className={`text-sm font-semibold ${active ? "text-indigo-700" : "text-gray-800"}`}>
+                  {type.label}
+                </span>
+                <span className="text-[11px] text-gray-400 leading-tight">{type.desc}</span>
+                {active && (
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-indigo-500" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── 2. Job Keyword ───────────────────────────────────────────────────── */}
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
@@ -112,46 +167,34 @@ export function SearchInfoStep({ data, onNext, isFirstStep }: SearchInfoStepProp
           type="text"
           placeholder="e.g. Frontend Developer, React Engineer…"
           value={formData.jobKeywords[0] || ""}
-          onChange={(e) => setFormData(prev => ({ ...prev, jobKeywords: e.target.value ? [e.target.value] : [] }))}
+          onChange={(e) =>
+            setFormData(prev => ({
+              ...prev,
+              jobKeywords: e.target.value ? [e.target.value] : [],
+            }))
+          }
           className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
         />
         <p className="text-xs text-gray-400">Enter the role you're applying for. We'll use this to find matching job posts.</p>
       </div>
 
-      {/* Section: Experience + Date */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
-              <Briefcase className="h-3.5 w-3.5" />
-            </span>
-            Years of Experience
-          </label>
-          <NativeSelect
-            value={formData.experienceLevel}
-            onChange={(v) => setFormData(prev => ({ ...prev, experienceLevel: v }))}
-            options={EXPERIENCE_LEVELS}
-            placeholder="Select level…"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
-              <Calendar className="h-3.5 w-3.5" />
-            </span>
-            Date Posted
-          </label>
-          <NativeSelect
-            value={formData.datePosted}
-            onChange={(v) => setFormData(prev => ({ ...prev, datePosted: v }))}
-            options={DATE_POSTED_OPTIONS}
-            placeholder="Select range…"
-          />
-        </div>
+      {/* ── 3. Years of Experience ───────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
+            <Briefcase className="h-3.5 w-3.5" />
+          </span>
+          Years of Experience
+        </label>
+        <NativeSelect
+          value={formData.experienceLevel}
+          onChange={(v) => setFormData(prev => ({ ...prev, experienceLevel: v }))}
+          options={EXPERIENCE_LEVELS}
+          placeholder="Select your experience level…"
+        />
       </div>
 
-      {/* Section: Resume Upload */}
+      {/* ── 4. Resume ────────────────────────────────────────────────────────── */}
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600">
@@ -165,10 +208,15 @@ export function SearchInfoStep({ data, onNext, isFirstStep }: SearchInfoStepProp
           <div
             onClick={() => !uploading && fileInputRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer group
-              ${uploading ? "border-indigo-300 bg-indigo-50/40" : "border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30"}`}
+              ${uploading
+                ? "border-indigo-300 bg-indigo-50/40"
+                : "border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30"}`}
           >
             <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 transition-transform
-              ${uploading ? "bg-indigo-100 text-indigo-500" : "bg-gray-100 text-gray-400 group-hover:bg-indigo-100 group-hover:text-indigo-500 group-hover:scale-110"}`}>
+              ${uploading
+                ? "bg-indigo-100 text-indigo-500"
+                : "bg-gray-100 text-gray-400 group-hover:bg-indigo-100 group-hover:text-indigo-500 group-hover:scale-110"}`}
+            >
               {uploading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Upload className="h-6 w-6" />}
             </div>
             {uploading ? (
@@ -198,11 +246,18 @@ export function SearchInfoStep({ data, onNext, isFirstStep }: SearchInfoStepProp
           </div>
         )}
 
-        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileSelect} className="hidden" disabled={uploading} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          onChange={handleFileSelect}
+          className="hidden"
+          disabled={uploading}
+        />
         {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
       </div>
 
-      {/* Navigation */}
+      {/* ── Navigation ───────────────────────────────────────────────────────── */}
       <div className="flex justify-end pt-4 border-t border-gray-100">
         <button
           onClick={() => canProceed && onNext(formData)}

@@ -1,8 +1,15 @@
-import { Send, Inbox, Star, ArrowUpRight } from "lucide-react"
+import { Send, Inbox, Star, ArrowUpRight, MessageSquare } from "lucide-react"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
+
+interface ActivityAction {
+  label: string
+  href: string
+  primary?: boolean
+  isReply?: boolean
+}
 
 interface ActivityItem {
   id: string
@@ -10,7 +17,7 @@ interface ActivityItem {
   title: string
   subtitle: string
   date: Date
-  actions: { label: string; href: string; primary?: boolean }[]
+  actions: ActivityAction[]
 }
 
 async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
@@ -35,6 +42,11 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
       })
     ])
 
+    // Build a set of thread IDs that have recruiter replies
+    const replyThreadIds = new Set(
+      replies.map((r: any) => r.thread_id).filter(Boolean)
+    )
+
     const activities: ActivityItem[] = []
 
     applications.forEach((app: any) => {
@@ -44,10 +56,27 @@ async function getRecentActivity(userId: string): Promise<ActivityItem[]> {
       } else if (app.scrapedPost.job?.company) {
         subtitle = `Applied to ${app.scrapedPost.job.company}`
       }
-      const actions = [{ label: "View Post", href: app.scrapedPost.post_url, primary: false }]
+
+      const actions: ActivityAction[] = []
+
       if (app.gmail_thread_id) {
-        actions.unshift({ label: "View Email", href: `https://mail.google.com/mail/u/0/#inbox/${app.gmail_thread_id}`, primary: true })
+        actions.push({
+          label: "View Email",
+          href: `https://mail.google.com/mail/u/0/#inbox/${app.gmail_thread_id}`,
+          primary: true,
+        })
       }
+
+      // Show "View Reply" only when the recruiter has replied to this thread
+      if (app.gmail_thread_id && replyThreadIds.has(app.gmail_thread_id)) {
+        actions.push({
+          label: "View Reply",
+          href: `https://mail.google.com/mail/u/0/#inbox/${app.gmail_thread_id}`,
+          primary: false,
+          isReply: true,
+        })
+      }
+
       activities.push({ id: `app-${app.id}`, type: 'email_sent', title: "Application Sent", subtitle, date: app.sent_at, actions })
     })
 
@@ -174,12 +203,14 @@ export async function RecentActivity() {
                           key={i}
                           href={action.href}
                           target={action.href.startsWith('http') ? '_blank' : undefined}
-                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors ${
-                            action.primary
-                              ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors ${action.isReply
+                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                              : action.primary
+                                ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
                         >
+                          {action.isReply && <MessageSquare className="h-3 w-3" />}
                           {action.label}
                         </Link>
                       ))}

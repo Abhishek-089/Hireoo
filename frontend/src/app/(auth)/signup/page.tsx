@@ -7,6 +7,7 @@ import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { sendTokenToExtension } from "@/lib/extension-auth"
 import { AlertCircle, CheckCircle2, Loader2, ArrowRight } from "lucide-react"
+import posthog from "posthog-js"
 
 const steps = [
   { n: "01", title: "Create your account", desc: "Takes less than 60 seconds." },
@@ -56,6 +57,10 @@ export default function SignUpPage() {
       }
 
       setSuccess(true)
+      posthog.capture("user_signed_up", {
+        method: "email",
+        name: `${formData.firstName} ${formData.lastName}`.trim(),
+      })
 
       const signInResult = await signIn("credentials", {
         email: formData.email,
@@ -85,6 +90,7 @@ export default function SignUpPage() {
   }
 
   const handleGoogleSignUp = () => {
+    posthog.capture("user_signed_up", { method: "google" })
     signIn("google", { callbackUrl: "/dashboard?new=true&syncExtension=true" })
   }
 

@@ -1,7 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { callGroq } from "./services/ai.service"
 import { prisma } from "./prisma"
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ""
 
 const EXTRACTION_PROMPT = `You are an expert HR data analyst. Extract structured job information from this LinkedIn hiring post.
 
@@ -25,15 +23,6 @@ Raw Post Text:
 
 Return ONLY the JSON object. No markdown, no explanation.`
 
-let genAI: GoogleGenerativeAI | null = null
-
-function getGenAI() {
-  if (!genAI && GEMINI_API_KEY) {
-    genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
-  }
-  return genAI
-}
-
 export interface EnrichedJobData {
   job_title: string | null
   company: string | null
@@ -51,30 +40,18 @@ export interface EnrichedJobData {
 export async function extractJobInfoFromText(
   rawText: string
 ): Promise<EnrichedJobData | null> {
-  const ai = getGenAI()
-  if (!ai) {
-    console.error("[AI Enrichment] No Gemini API key configured")
-    return null
-  }
-
   try {
-    const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" })
-
     const prompt = EXTRACTION_PROMPT.replace("{TEXT}", rawText.slice(0, 5000))
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.1,
-        topP: 0.8,
-        topK: 40,
-        maxOutputTokens: 1024,
-      },
+    const response = await callGroq({
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 1024,
     })
 
-    const responseText = result.response.text()
+    const content = response.choices[0]?.message?.content || ""
 
-    let jsonStr = responseText
+    let jsonStr = content.trim()
     if (jsonStr.includes("```json")) {
       jsonStr = jsonStr.split("```json")[1].split("```")[0].trim()
     } else if (jsonStr.includes("```")) {
@@ -84,7 +61,7 @@ export async function extractJobInfoFromText(
     const data = JSON.parse(jsonStr) as EnrichedJobData
     return data
   } catch (error) {
-    console.error("[AI Enrichment] Gemini extraction failed:", error)
+    console.error("[AI Enrichment] Groq extraction failed:", error)
     return null
   }
 }

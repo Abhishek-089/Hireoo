@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import posthog from "posthog-js"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -72,7 +73,10 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
               <Link
                 key={item.name}
                 href={item.href}
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => {
+                  setSidebarOpen(false)
+                  if (!isActive) posthog.capture("dashboard_nav_clicked", { section: item.name })
+                }}
                 className={cn(
                   "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                   isActive

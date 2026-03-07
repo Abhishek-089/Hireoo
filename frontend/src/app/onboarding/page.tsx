@@ -8,6 +8,7 @@ import { EmailTemplateStep } from "@/components/onboarding/EmailTemplateStep"
 import { SettingsStep } from "@/components/onboarding/SettingsStep"
 import { ProgressBar } from "@/components/onboarding/ProgressBar"
 import { Loader2 } from "lucide-react"
+import posthog from "posthog-js"
 
 const STEPS = [
   { id: 1, title: "Search Info", component: SearchInfoStep },
@@ -39,7 +40,7 @@ export default function OnboardingPage() {
       if (response.ok) {
         const data = await response.json()
         const mappedData = {
-          searchInfo: { jobKeywords: data.jobKeywords, experienceLevel: data.experienceLevel, datePosted: data.datePosted, resume: data.resume },
+          searchInfo: { jobKeywords: data.jobKeywords, jobType: data.jobType, experienceLevel: data.experienceLevel, datePosted: data.datePosted, resume: data.resume },
           emailTemplate: { templateId: data.templateId, templateName: data.templateName, subject: data.subject, body: data.body },
           settings: { extensionInstalled: data.extensionInstalled, completed: data.completed },
         }
@@ -79,14 +80,28 @@ export default function OnboardingPage() {
         console.error("Failed to save step data:", error)
       }
     }
+    posthog.capture("onboarding_step_completed", {
+      step: currentStep,
+      step_name: STEPS[currentStep - 1]?.title,
+    })
+
     if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1)
     } else {
+      posthog.capture("onboarding_completed")
       router.push("/dashboard/job-matches?from=onboarding")
     }
   }
 
-  const handleBack = () => { if (currentStep > 1) setCurrentStep(currentStep - 1) }
+  const handleBack = () => {
+    if (currentStep > 1) {
+      posthog.capture("onboarding_step_back", {
+        from_step: currentStep,
+        from_step_name: STEPS[currentStep - 1]?.title,
+      })
+      setCurrentStep(currentStep - 1)
+    }
+  }
 
   if (status === "loading" || isLoadingData) {
     return (
@@ -123,7 +138,11 @@ export default function OnboardingPage() {
         <div className="p-6 md:p-10">
           {CurrentStepComponent && (
             <CurrentStepComponent
-              data={onboardingData[getStepKey(currentStep) as keyof typeof onboardingData]}
+              data={
+                currentStep === STEPS.length
+                  ? onboardingData          // last step gets ALL data for review
+                  : onboardingData[getStepKey(currentStep) as keyof typeof onboardingData]
+              }
               onNext={handleNext}
               onBack={handleBack}
               isFirstStep={currentStep === 1}

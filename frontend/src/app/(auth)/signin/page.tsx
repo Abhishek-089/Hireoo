@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
 import { sendTokenToExtension } from "@/lib/extension-auth"
 import { AlertCircle, Loader2, ArrowRight, Zap, CheckCircle2 } from "lucide-react"
+import posthog from "posthog-js"
 
 const highlights = [
   "10 fresh job matches delivered daily",
@@ -55,6 +56,7 @@ function SignInForm() {
       if (result?.error) {
         setError("Invalid email or password")
       } else {
+        posthog.capture("user_logged_in", { method: "email" })
         try {
           const tokenResponse = await fetch("/api/extension/token", { credentials: "include" })
           if (tokenResponse.ok) {
@@ -74,6 +76,7 @@ function SignInForm() {
   }
 
   const handleGoogleSignIn = () => {
+    posthog.capture("user_logged_in", { method: "google" })
     signIn("google", { callbackUrl: "/dashboard?syncExtension=true" })
   }
 

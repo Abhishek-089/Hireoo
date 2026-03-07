@@ -38,9 +38,9 @@ export async function POST(request: NextRequest) {
 
     // Handle new step keys from refactor
     if (stepKey === 'searchInfo') {
-      if (data.jobKeywords) updateData.skills = data.jobKeywords // Mapping keywords to skills for now, or new field? Schema has skills[].
+      if (data.jobKeywords) updateData.skills = data.jobKeywords
       if (data.experienceLevel) updateData.experience_level = data.experienceLevel
-      if (data.datePosted) updateData.date_posted_preference = data.datePosted
+      if (data.jobType) updateData.job_types = [data.jobType]
 
       // Handle Resume
       if (data.resume?.uploaded && data.resume.fileUrl) {

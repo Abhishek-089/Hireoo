@@ -58,8 +58,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       onboarding_step: user.onboarding_step,
       // Search Info Step Data
-      jobKeywords: user.skills, // Using skills field for keywords
+      jobKeywords: user.skills,
       experienceLevel: user.experience_level,
+      jobType: user.job_types?.[0] ?? null,   // ← first entry is what the user picked
       datePosted: user.date_posted_preference,
 
       // Email Template Step Data

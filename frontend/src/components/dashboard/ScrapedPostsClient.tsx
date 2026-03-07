@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { signIn } from "next-auth/react"
-import { Mail, ExternalLink, Star, CheckCircle2, MessageSquare, Zap, Loader2, MapPin, Briefcase, Clock } from "lucide-react"
+import { Mail, ExternalLink, Star, CheckCircle2, MessageSquare, Zap, Loader2, MapPin, Briefcase, Clock, ChevronDown, ChevronUp } from "lucide-react"
 import { parseLinkedInPost, type ParsedPost } from "@/lib/post-parser"
+import posthog from "posthog-js"
 
 type EmailReply = {
   id: string
@@ -97,6 +98,18 @@ export function ScrapedPostsClient({
   title?: string
   showAppliedBadge?: boolean
 }) {
+  // ── card expand state ──────────────────────────────────────────────────────
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   // ── single-apply state ─────────────────────────────────────────────────────
   const [modalOpen, setModalOpen] = useState(false)
   const [resumeModalOpen, setResumeModalOpen] = useState(false)
@@ -165,6 +178,14 @@ export function ScrapedPostsClient({
     setLoading(true)
     setActivePost(post)
 
+    posthog.capture("apply_button_clicked", {
+      post_id: post.id,
+      match_score: post.matchScore,
+      match_quality: post.matchQuality,
+      company: post.jobData?.company ?? null,
+      job_title: post.jobData?.title ?? null,
+    })
+
     try {
       const res = await fetch("/api/scraping/apply", {
         method: "POST",
@@ -174,20 +195,33 @@ export function ScrapedPostsClient({
       const data = await res.json()
 
       if (res.status === 409 && data.code === "RESUME_REQUIRED") {
+        posthog.capture("apply_blocked_resume_missing", { post_id: post.id })
         setResumeModalOpen(true)
         setLoading(false)
         return
       }
       if (!res.ok || !data.success) {
+        posthog.capture("cover_letter_generation_failed", {
+          post_id: post.id,
+          error: data.error,
+        })
         setError(data.error || "Failed to generate cover letter")
         setLoading(false)
         setActivePost(null)
         return
       }
 
+      posthog.capture("cover_letter_generated", {
+        post_id: post.id,
+        match_score: post.matchScore,
+      })
       setCoverLetter(data.coverLetter || "")
       setModalOpen(true)
     } catch (e: any) {
+      posthog.capture("cover_letter_generation_failed", {
+        post_id: post.id,
+        error: e?.message,
+      })
       setError(e?.message || "Unexpected error while generating cover letter")
       setActivePost(null)
     } finally {
@@ -219,14 +253,25 @@ export function ScrapedPostsClient({
         res.status === 409 &&
         (data.code === "GMAIL_NOT_CONNECTED" || data.code === "GMAIL_RECONNECT")
       ) {
+        posthog.capture("apply_blocked_gmail_not_connected", { post_id: activePost.id })
         setGmailModalOpen(true)
         return
       }
       if (!res.ok || !data.success) {
+        posthog.capture("job_apply_failed", {
+          post_id: activePost.id,
+          error: data.error,
+        })
         setError(data.error || "Failed to send email")
         return
       }
 
+      posthog.capture("job_applied", {
+        method: "manual",
+        post_id: activePost.id,
+        hr_email: hrEmail,
+        match_score: activePost.matchScore,
+      })
       setSuccess("Application email sent successfully.")
       setModalOpen(false)
       setActivePost(null)
@@ -239,6 +284,7 @@ export function ScrapedPostsClient({
   }
 
   function handleConnectGmail() {
+    posthog.capture("gmail_connect_clicked", { source: "apply_modal" })
     signIn("google", { callbackUrl: "/dashboard" })
   }
 
@@ -298,6 +344,7 @@ export function ScrapedPostsClient({
         return
       }
 
+      posthog.capture("resume_uploaded", { file_name: resumeFile.name })
       setResumeModalOpen(false)
       setResumeFile(null)
       await handleApplyClick(activePost)
@@ -329,6 +376,7 @@ export function ScrapedPostsClient({
 
       if (allPosts.length === 0) return
 
+      posthog.capture("auto_apply_started", { total_jobs: allPosts.length })
       setAutoApplyQueue(
         allPosts.map((post) => ({ post, status: "pending" as AutoApplyStatus }))
       )
@@ -452,6 +500,14 @@ export function ScrapedPostsClient({
 
     setAutoApplyRunning(false)
     setAutoApplyDone(true)
+
+    const sentCount = autoApplyQueue.filter((i) => i.status === "sent").length
+    const failedCount = autoApplyQueue.filter((i) => i.status === "failed").length
+    posthog.capture("auto_apply_completed", {
+      total: autoApplyQueue.length,
+      sent: sentCount,
+      failed: failedCount,
+    })
   }
 
   const autoApplySentCount = autoApplyQueue.filter((i) => i.status === "sent").length
@@ -533,10 +589,24 @@ export function ScrapedPostsClient({
               const parsed: ParsedPost = parseLinkedInPost(post.text, post.emails)
               const isSelected = selectedIds.has(post.id)
 
+              const isExpanded = expandedIds.has(post.id)
+              const descriptionText = (showEnriched && post.jobData?.description)
+                ? post.jobData.description
+                : parsed.description
+              const COLLAPSE_THRESHOLD = 300
+              const isLongDescription = descriptionText.length > COLLAPSE_THRESHOLD
+
+              const qualityAccent =
+                post.matchQuality === "good"
+                  ? "border-l-emerald-400"
+                  : post.matchQuality === "medium"
+                  ? "border-l-amber-400"
+                  : "border-l-gray-200"
+
               return (
                 <div
                   key={post.id}
-                  className={`rounded-2xl border p-4 flex flex-col gap-2 transition-all ${
+                  className={`rounded-2xl border border-l-4 p-4 flex flex-col gap-0 transition-all ${qualityAccent} ${
                     isSelected
                       ? "border-indigo-300 bg-indigo-50/30"
                       : post.applied
@@ -546,7 +616,7 @@ export function ScrapedPostsClient({
                 >
                   <div className="flex items-start gap-3">
                     {!showAppliedBadge && !post.applied && (
-                      <div className="pt-0.5 shrink-0">
+                      <div className="pt-1 shrink-0">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -556,138 +626,160 @@ export function ScrapedPostsClient({
                       </div>
                     )}
 
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          {/* Title + Match Score Row */}
-                          <div className="flex items-start justify-between gap-3 mb-1.5">
-                            <h3 className="text-base font-semibold text-gray-900 leading-snug">
-                              {(showEnriched && post.jobData?.title && post.jobData.title !== "Unknown Title")
-                                ? post.jobData.title
-                                : parsed.title || "Hiring Post"}
-                            </h3>
-                              {post.matchScore !== null && post.matchQuality && (
-                              <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold shrink-0 ${
-                                  post.matchQuality === "good"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : post.matchQuality === "medium"
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-gray-100 text-gray-600"
-                                }`}
-                              >
-                                <Star className="h-3 w-3" />
-                                {Math.round(post.matchScore)}%
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Meta Row: Company, Location, Experience, Work Mode */}
-                          <div className="flex items-center gap-3 text-sm text-gray-600 flex-wrap mb-2">
-                            {((showEnriched && post.jobData?.company && post.jobData.company !== "Unknown Company")
-                              ? post.jobData.company
-                              : parsed.company) && (
-                              <span className="flex items-center gap-1 font-medium text-gray-700">
-                                <Briefcase className="h-3.5 w-3.5 text-gray-400" />
-                                {(showEnriched && post.jobData?.company && post.jobData.company !== "Unknown Company")
-                                  ? post.jobData.company
-                                  : parsed.company}
-                              </span>
-                            )}
-                            {((showEnriched && post.jobData?.location)
-                              ? post.jobData.location
-                              : parsed.location) && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                                {(showEnriched && post.jobData?.location) ? post.jobData.location : parsed.location}
-                              </span>
-                            )}
-                            {parsed.experience && (
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3.5 w-3.5 text-gray-400" />
-                                {parsed.experience}
-                              </span>
-                            )}
-                            {parsed.workMode && (
-                              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-                                {parsed.workMode}
-                              </span>
-                            )}
-                            {((showEnriched && post.jobData?.salary) || parsed.salary) && (
-                              <span className="text-green-700 font-medium">
-                                {(showEnriched && post.jobData?.salary) ? post.jobData.salary : parsed.salary}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Skills */}
-                          {(() => {
-                            const skills = (showEnriched && post.jobData?.skills?.length)
-                              ? post.jobData.skills
-                              : parsed.skills
-                                return skills.length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5 mb-2.5">
-                                {skills.slice(0, 8).map((skill) => (
-                                  <span
-                                    key={skill}
-                                    className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100"
-                                  >
-                                    {skill}
-                                  </span>
-                                ))}
-                                {skills.length > 8 && (
-                                  <span className="text-xs text-gray-500 self-center">
-                                    +{skills.length - 8} more
-                                  </span>
-                                )}
-                              </div>
-                            ) : null
-                          })()}
-
-                          {/* Description */}
-                          <p className="text-sm text-gray-600 line-clamp-3 whitespace-pre-line leading-relaxed">
-                            {(showEnriched && post.jobData?.description)
-                              ? truncate(post.jobData.description, 350)
-                              : truncate(parsed.description, 350)}
-                          </p>
-
-                          {/* Email + View Post Row */}
-                          <div className="flex items-center justify-between mt-2.5 gap-3">
-                            <div className="flex flex-wrap gap-2 items-center">
-                              {post.emails.length > 0 ? (
-                                post.emails.map((email) => (
-                                  <span
-                                    key={email}
-                                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600"
-                                  >
-                                    <Mail className="h-3 w-3" />
-                                    {email}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-xs text-gray-400 italic">No email found</span>
-                              )}
-                            </div>
-                            {post.postUrl && (
-                              <Link
-                                href={post.postUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 shrink-0"
-                              >
-                                View post
-                                <ExternalLink className="h-3 w-3" />
-                              </Link>
-                            )}
-                          </div>
-                        </div>
+                    <div className="flex-1 min-w-0">
+                      {/* Title + Match Score */}
+                      <div className="flex items-start justify-between gap-3 mb-1.5">
+                        <h3 className="text-base font-semibold text-gray-900 leading-snug">
+                          {(showEnriched && post.jobData?.title && post.jobData.title !== "Unknown Title")
+                            ? post.jobData.title
+                            : parsed.title || "Hiring Post"}
+                        </h3>
+                        {post.matchScore !== null && post.matchQuality && (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 ${
+                              post.matchQuality === "good"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : post.matchQuality === "medium"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            <Star className="h-3 w-3" />
+                            {Math.round(post.matchScore)}%
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[11px] text-gray-400">
-                            Found {formatDate(post.createdAt)}
+                      {/* Meta: Company, Location, Experience, Work Mode, Salary */}
+                      <div className="flex items-center gap-x-3 gap-y-1 text-sm text-gray-600 flex-wrap mb-2.5">
+                        {((showEnriched && post.jobData?.company && post.jobData.company !== "Unknown Company")
+                          ? post.jobData.company
+                          : parsed.company) && (
+                          <span className="flex items-center gap-1 font-medium text-gray-700">
+                            <Briefcase className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                            {(showEnriched && post.jobData?.company && post.jobData.company !== "Unknown Company")
+                              ? post.jobData.company
+                              : parsed.company}
                           </span>
+                        )}
+                        {((showEnriched && post.jobData?.location) ? post.jobData.location : parsed.location) && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                            {(showEnriched && post.jobData?.location) ? post.jobData.location : parsed.location}
+                          </span>
+                        )}
+                        {parsed.experience && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                            {parsed.experience}
+                          </span>
+                        )}
+                        {parsed.workMode && (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                            {parsed.workMode}
+                          </span>
+                        )}
+                        {((showEnriched && post.jobData?.salary) || parsed.salary) && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100">
+                            {(showEnriched && post.jobData?.salary) ? post.jobData.salary : parsed.salary}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Skills */}
+                      {(() => {
+                        const skills = (showEnriched && post.jobData?.skills?.length)
+                          ? post.jobData.skills
+                          : parsed.skills
+                        return skills.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 mb-3">
+                            {skills.slice(0, 8).map((skill) => (
+                              <span
+                                key={skill}
+                                className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100"
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                            {skills.length > 8 && (
+                              <span className="text-xs text-gray-400 self-center">
+                                +{skills.length - 8} more
+                              </span>
+                            )}
+                          </div>
+                        ) : null
+                      })()}
+
+                      {/* Description with Show more / Show less */}
+                      {descriptionText && (
+                        <div className="mb-3">
+                          <p
+                            className={`text-sm text-gray-600 whitespace-pre-line leading-relaxed ${
+                              !isExpanded && isLongDescription ? "line-clamp-3" : ""
+                            }`}
+                          >
+                            {descriptionText}
+                          </p>
+                          {isLongDescription && (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(post.id)}
+                              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 cursor-pointer transition-colors"
+                            >
+                              {isExpanded ? (
+                                <>
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                  Show less
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                  Show more
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Email + View Post */}
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {post.emails.length > 0 ? (
+                            post.emails.map((email) => (
+                              <span
+                                key={email}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                              >
+                                <Mail className="h-3 w-3" />
+                                {email}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">No email found</span>
+                          )}
+                        </div>
+                        {post.postUrl && (
+                          <Link
+                            href={post.postUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => posthog.capture("view_post_on_linkedin", {
+                              post_id: post.id,
+                              match_score: post.matchScore,
+                            })}
+                            className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 shrink-0"
+                          >
+                            View post
+                            <ExternalLink className="h-3 w-3" />
+                          </Link>
+                        )}
+                      </div>
+
+                      {/* Footer: date / status / apply button */}
+                      <div className="flex items-center justify-between pt-2.5 border-t border-gray-100">
+                        <div className="flex items-center gap-2 flex-wrap">
+ 
                           {post.applied && post.appliedAt && (
                             <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
                               <CheckCircle2 className="h-3 w-3" />
@@ -709,7 +801,9 @@ export function ScrapedPostsClient({
                             onClick={() => handleApplyClick(post)}
                             className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer"
                           >
-                            {loading && activePost?.id === post.id ? "Preparing…" : "Apply"}
+                            {loading && activePost?.id === post.id ? (
+                              <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Preparing…</>
+                            ) : "Apply"}
                           </button>
                         )}
                         {post.applied && (
@@ -720,6 +814,7 @@ export function ScrapedPostsClient({
                         )}
                       </div>
 
+                      {/* Recruiter replies */}
                       {post.applied && post.hasReplies && post.replies && post.replies.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
                           <p className="text-xs font-semibold text-gray-700 mb-2">Recruiter Replies</p>
@@ -733,7 +828,9 @@ export function ScrapedPostsClient({
                                   </span>
                                   <span className="text-[11px] text-gray-400">{formatDate(reply.received_at.toString())}</span>
                                 </div>
-                                <p className="text-xs text-gray-500 mb-0.5"><span className="font-medium">Subject:</span> {reply.subject}</p>
+                                <p className="text-xs text-gray-500 mb-0.5">
+                                  <span className="font-medium">Subject:</span> {reply.subject}
+                                </p>
                                 <p className="text-xs text-gray-600 line-clamp-2">{reply.body_text}</p>
                               </div>
                             ))}
@@ -794,6 +891,7 @@ export function ScrapedPostsClient({
                 className="w-full h-56 border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 resize-none"
                 value={coverLetter}
                 onChange={(e) => setCoverLetter(e.target.value)}
+                onBlur={() => posthog.capture("cover_letter_edited", { post_id: activePost?.id })}
               />
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">

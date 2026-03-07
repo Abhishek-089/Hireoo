@@ -10,6 +10,7 @@ import {
   Settings,
   SlidersHorizontal,
 } from "lucide-react"
+import posthog from "posthog-js"
 
 interface DashboardHeaderProps {
   user: {
@@ -41,7 +42,7 @@ export function DashboardHeader({ user, setSidebarOpen }: DashboardHeaderProps) 
 
         {/* Right: actions + user */}
         <div className="flex items-center gap-3 ml-auto">
-          <Link href="/onboarding">
+          <Link href="/onboarding" onClick={() => posthog.capture("start_job_search_clicked")}>
             <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-sm shadow-indigo-200">
               <SlidersHorizontal className="h-4 w-4" />
               <span className="hidden sm:inline">Start Job Search</span>
@@ -100,6 +101,7 @@ export function DashboardHeader({ user, setSidebarOpen }: DashboardHeaderProps) 
                     </Link>
                     <button
                       onClick={() => {
+                        posthog.capture("user_signed_out")
                         setUserMenuOpen(false)
                         signOut({ callbackUrl: "/" })
                       }}

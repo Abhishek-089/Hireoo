@@ -2,66 +2,32 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { generateCoverLetter } from "@/lib/services/ai.service"
 
-// Very simple cover letter generator for now.
-// In the future this can call OpenAI using the user's resume text and post text.
-function buildCoverLetter(opts: {
-  hrName: string
-  userFirstName: string
-  userLastName: string
-  userSummary?: string | null
-  postText: string
-}) {
-  const { hrName, userFirstName, userLastName, userSummary, postText } = opts
-
-  const safeHrName = hrName || "Hiring Manager"
-
-  return `
-Hello ${safeHrName},
-
-I hope you're doing well. I'm writing to express my strong interest in opportunities that align with my background as a Full-Stack Developer.
-
-${userSummary || "Over the last few years I've contributed to multiple production web applications across SaaS, AI-integrated products and e‑commerce systems, working end‑to‑end from frontend experience to backend APIs and data modeling."}
-
-I came across your recent LinkedIn post:
-
-"${postText.slice(0, 600)}${postText.length > 600 ? "..." : ""}"
-
-Based on this, I believe my experience building and shipping real-world products, collaborating closely with teams, and maintaining high-quality, maintainable code would allow me to add value quickly.
-
-I'm currently available for freelance or contract work and can start immediately. I'd be happy to share more project details or walk through my portfolio.
-
-Looking forward to hearing from you.
-
-Sincerely,
-${userFirstName} ${userLastName}
-`.trim()
-}
-
+// ── Route handler ─────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { scrapedPostId } = await request.json()
-
     if (!scrapedPostId || typeof scrapedPostId !== "string") {
-      return NextResponse.json(
-        { error: "scrapedPostId is required" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "scrapedPostId is required" }, { status: 400 })
     }
 
-    // Load user, resume, and scraped post
+    // ── Load everything in parallel ───────────────────────────────────────────
     const [user, resume, scrapedPost] = await Promise.all([
       prisma.user.findUnique({
         where: { id: session.user.id },
         select: {
           name: true,
+          skills: true,
+          experience_level: true,
+          job_types: true,
           resume_uploaded: true,
+          email_template_config: true,
         },
       }),
       prisma.resume.findFirst({
@@ -70,77 +36,73 @@ export async function POST(request: NextRequest) {
       }),
       prisma.scrapedPost.findUnique({
         where: { id: scrapedPostId },
+        include: { job: true },
       }),
     ])
 
-
-    // Require that the user has actually uploaded a resume
-    // Prefer the concrete Resume record but also honour the resume_uploaded flag
+    // Resume check
     if (!resume && !user?.resume_uploaded) {
-      return NextResponse.json(
-        { error: "Resume required", code: "RESUME_REQUIRED" },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: "Resume required", code: "RESUME_REQUIRED" }, { status: 409 })
     }
 
     if (!scrapedPost) {
-      return NextResponse.json(
-        { error: "Scraped post not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Scraped post not found" }, { status: 404 })
     }
 
-    // Check if user has access to this post through ScrapedPostMatch
+    // Access check
     const userMatch = await prisma.scrapedPostMatch.findUnique({
-      where: {
-        user_id_scraped_post_id: {
-          user_id: session.user.id,
-          scraped_post_id: scrapedPostId
-        }
-      }
+      where: { user_id_scraped_post_id: { user_id: session.user.id, scraped_post_id: scrapedPostId } },
     })
-
     if (!userMatch) {
-      return NextResponse.json(
-        { error: "You don't have access to this post" },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: "You don't have access to this post" }, { status: 403 })
     }
 
-    const text = scrapedPost.text || ""
-
-    // Try to detect an HR/email name from the text (very naive)
-    let hrName = "Hiring Manager"
-    const nameMatch = text.match(/Hi\s+([A-Z][a-z]+)\b/) || text.match(/Dear\s+([A-Z][a-z]+)\b/)
-    if (nameMatch?.[1]) {
-      hrName = nameMatch[1]
-    }
-
+    // ── Gather context ────────────────────────────────────────────────────────
     const [firstName, ...rest] = (user?.name || "").split(" ").filter(Boolean)
-    const userFirstName = firstName || "Your"
-    const userLastName = rest.join(" ")
+    const userFirstName = firstName || "there"
+    const userLastName  = rest.join(" ")
 
-    const coverLetter = buildCoverLetter({
-      hrName,
-      userFirstName,
-      userLastName,
-      userSummary: null,
-      postText: text,
-    })
+    const templateConfig  = (user?.email_template_config as any) || {}
+    const toneId          = templateConfig.templateId || "direct_application"
+    const userSkills      = user?.skills ?? []
+    const experienceLevel = user?.experience_level ?? undefined
+    const jobType         = user?.job_types?.[0] ?? undefined
 
-    return NextResponse.json({
-      success: true,
-      coverLetter,
-      hrName,
-      scrapedPostId,
-    })
+    // Enriched job data (may be null if not yet enriched)
+    const job = (scrapedPost as any).job
+    const jobTitle          = job?.title    || ""
+    const company           = job?.company  || ""
+    const location          = job?.location || undefined
+    const jobRequiredSkills = job?.skills   || []
+    const jobDescription    = job?.description || ""
+
+    // Detect HR name from post text
+    const postText = scrapedPost.text || ""
+    let hrName = "Hiring Manager"
+    const nameMatch = postText.match(/Hi\s+([A-Z][a-z]+)\b/) || postText.match(/Dear\s+([A-Z][a-z]+)\b/)
+    if (nameMatch?.[1]) hrName = nameMatch[1]
+
+    // ── Generate cover letter via AI service ──────────────────────────────────
+    const coverLetter = await generateCoverLetter(
+      userSkills,
+      jobTitle,
+      company,
+      jobDescription,
+      {
+        userFirstName,
+        userLastName,
+        experienceLevel,
+        jobType,
+        toneId,
+        location,
+        jobRequiredSkills,
+        hrName,
+      }
+    )
+
+    return NextResponse.json({ success: true, coverLetter, hrName, scrapedPostId })
   } catch (error) {
     console.error("Scraping apply API error:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-
-
