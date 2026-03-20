@@ -19,9 +19,10 @@ interface DashboardHeaderProps {
     image?: string | null
   }
   setSidebarOpen: (open: boolean) => void
+  hasProfile?: boolean
 }
 
-export function DashboardHeader({ user, setSidebarOpen }: DashboardHeaderProps) {
+export function DashboardHeader({ user, setSidebarOpen, hasProfile }: DashboardHeaderProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   const initials = user.name
@@ -42,12 +43,14 @@ export function DashboardHeader({ user, setSidebarOpen }: DashboardHeaderProps) 
 
         {/* Right: actions + user */}
         <div className="flex items-center gap-3 ml-auto">
-          <Link href="/onboarding" onClick={() => posthog.capture("start_job_search_clicked")}>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-sm shadow-indigo-200">
-              <SlidersHorizontal className="h-4 w-4" />
-              <span className="hidden sm:inline">Start Job Search</span>
-            </button>
-          </Link>
+          {!hasProfile && (
+            <Link href="/onboarding" onClick={() => posthog.capture("start_job_search_clicked")}>
+              <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-sm shadow-indigo-200">
+                <SlidersHorizontal className="h-4 w-4" />
+                <span className="hidden sm:inline">Start Job Search</span>
+              </button>
+            </Link>
+          )}
 
           {/* User Dropdown */}
           <div className="relative">

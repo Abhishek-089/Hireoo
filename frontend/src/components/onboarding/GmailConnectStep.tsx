@@ -20,14 +20,15 @@ export function GmailConnectStep({
   isLastStep,
 }: GmailConnectStepProps) {
   const handleConnect = () => {
-    // Trigger real Google OAuth flow via NextAuth.
-    // User will be redirected back to /onboarding after connecting Gmail.
-    signIn("google", { callbackUrl: "/onboarding" })
-
-    // Advance to the next onboarding step, but DO NOT mark Gmail as connected
-    // here. The real connection status is based on whether Gmail credentials
-    // exist in the database (set in the NextAuth sign-in callback).
-    onNext({})
+    signIn(
+      "google",
+      { callbackUrl: "/onboarding" },
+      {
+        scope: "openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
+        access_type: "offline",
+        prompt: "consent",
+      }
+    )
   }
 
   const handleSkip = () => {

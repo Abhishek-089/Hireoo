@@ -5,7 +5,6 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { TokenEncryption } from "@/lib/encryption"
-
 // Lazy adapter initialization - only create when actually needed
 let adapterInstance: any = null
 function getAdapter() {
@@ -35,9 +34,8 @@ export const authOptions: NextAuthOptions = {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         authorization: {
           params: {
-            scope: 'openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify',
-            access_type: 'offline',
-            prompt: 'consent',
+            scope: 'openid email profile',
+            prompt: 'select_account',
           },
         },
       })
@@ -82,7 +80,8 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 365 * 24 * 60 * 60,   // 1 year — session stays alive unless user explicitly logs out
+    updateAge: 24 * 60 * 60,       // Refresh JWT once per day on activity (resets the 1-year clock)
   },
   callbacks: {
     async jwt({ token, user, account }) {
@@ -90,23 +89,25 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
       }
 
-      // On first Google sign-in, store Gmail credentials in DB
-      if (account?.provider === 'google' && account.scope?.includes('gmail') && user?.id) {
-        token.gmailAccessToken = account.access_token
-        token.gmailRefreshToken = account.refresh_token
-        token.gmailExpiresAt = account.expires_at
-        token.gmailScope = account.scope
+      // Persist the sign-in provider so we can show the indicator in the UI
+      if (account?.provider) {
+        token.lastSignInProvider = account.provider
+      }
 
+      // When the user explicitly connects Gmail (scope includes gmail), store credentials
+      if (account?.provider === 'google' && account.scope?.includes('gmail') && user?.id) {
         try {
           const encryptedAccessToken = TokenEncryption.encryptToken(account.access_token!)
-          const encryptedRefreshToken = TokenEncryption.encryptToken(account.refresh_token!)
+          const encryptedRefreshToken = account.refresh_token
+            ? TokenEncryption.encryptToken(account.refresh_token)
+            : null
           const expiresAt = new Date(account.expires_at! * 1000)
 
           await prisma.gmailCredentials.upsert({
             where: { user_id: user.id },
             update: {
               access_token: encryptedAccessToken,
-              refresh_token: encryptedRefreshToken,
+              ...(encryptedRefreshToken && { refresh_token: encryptedRefreshToken }),
               token_expiry: expiresAt,
               scopes: account.scope!.split(' '),
               updated_at: new Date(),
@@ -115,7 +116,7 @@ export const authOptions: NextAuthOptions = {
               user_id: user.id,
               email_address: user.email!,
               access_token: encryptedAccessToken,
-              refresh_token: encryptedRefreshToken,
+              refresh_token: encryptedRefreshToken ?? '',
               token_expiry: expiresAt,
               scopes: account.scope!.split(' '),
             },
@@ -135,6 +136,9 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string
+        if (token.lastSignInProvider) {
+          session.user.lastSignInProvider = token.lastSignInProvider
+        }
 
         // Fetch fresh user data from database to reflect any manual changes
         try {
@@ -159,16 +163,14 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Include Gmail connection status in session
-        if (token.gmailAccessToken) {
-          try {
-            const gmailCredential = await prisma.gmailCredentials.findUnique({
-              where: { user_id: session.user.id }
-            })
-            session.user.gmailConnected = !!gmailCredential
-          } catch (error) {
-            console.error('Error checking Gmail connection:', error)
-            session.user.gmailConnected = false
-          }
+        try {
+          const gmailCredential = await prisma.gmailCredentials.findUnique({
+            where: { user_id: session.user.id }
+          })
+          session.user.gmailConnected = !!gmailCredential
+        } catch (error) {
+          console.error('Error checking Gmail connection:', error)
+          session.user.gmailConnected = false
         }
       }
       return session
@@ -215,7 +217,6 @@ export const authOptions: NextAuthOptions = {
             user.id = dbUser.id
           }
           // New users: return true and let the PrismaAdapter create User + Account.
-          // Gmail credentials are then stored in the jwt callback once user.id is known.
         } catch (error) {
           console.error('Error in signIn callback:', error)
           return false

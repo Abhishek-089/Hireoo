@@ -90,6 +90,9 @@ export default function SignUpPage() {
   }
 
   const handleGoogleSignUp = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("hireoo_last_signin_provider", "google")
+    }
     posthog.capture("user_signed_up", { method: "google" })
     signIn("google", { callbackUrl: "/dashboard?new=true&syncExtension=true" })
   }

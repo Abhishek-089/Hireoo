@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSession } from "next-auth/react"
+import { useSession, signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -55,8 +55,15 @@ export default function EmailSettingsPage() {
   }
 
   const handleConnectGmail = () => {
-    // Redirect to Google OAuth with Gmail scopes
-    window.location.href = "/api/auth/signin/google?callbackUrl=/dashboard/email-settings"
+    signIn(
+      "google",
+      { callbackUrl: "/dashboard/email-settings" },
+      {
+        scope: "openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
+        access_type: "offline",
+        prompt: "consent",
+      }
+    )
   }
 
   const handleRevokeGmail = async () => {

@@ -285,7 +285,15 @@ export function ScrapedPostsClient({
 
   function handleConnectGmail() {
     posthog.capture("gmail_connect_clicked", { source: "apply_modal" })
-    signIn("google", { callbackUrl: "/dashboard" })
+    signIn(
+      "google",
+      { callbackUrl: "/dashboard/job-matches" },
+      {
+        scope: "openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
+        access_type: "offline",
+        prompt: "consent",
+      }
+    )
   }
 
   function validateResumeFile(file: File): string | null {

@@ -3,6 +3,7 @@ import { RecentActivity } from "@/components/dashboard/RecentActivity"
 import { QuickActions } from "@/components/dashboard/QuickActions"
 import { ExtensionAutoLogin } from "@/components/extension/ExtensionAutoLogin"
 import { DailyLimitProgress } from "@/components/dashboard/DailyLimitProgress"
+import { ProfileSummaryBanner } from "@/components/dashboard/ProfileSummaryBanner"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -86,8 +87,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       extension_installed: true,
       linkedin_connected: true,
       resume_uploaded: true,
+      current_role: true,
+      experience_level: true,
+      skills: true,
+      preferred_job_titles: true,
+      preferred_locations: true,
+      remote_work_preferred: true,
+      job_types: true,
+      email_template_config: true,
     }
   }) : null
+
+  const hasProfile = !!(
+    userStatus?.resume_uploaded ||
+    (userStatus?.preferred_job_titles && userStatus.preferred_job_titles.length > 0)
+  )
 
   const firstName = session?.user?.name?.split(" ")[0] || "there"
   const greeting = isNewUser ? `Welcome to Hireoo, ${firstName}!` : `${getGreetingTime()}, ${firstName}`
@@ -112,33 +126,45 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </div>
         </div>
 
-        {/* Job Preferences banner */}
-        <Link href="/onboarding" className="group block">
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-5 flex items-center justify-between gap-4 hover:shadow-lg hover:shadow-indigo-200 transition-all">
-            {/* Background decoration */}
-            <div className="absolute right-0 top-0 w-64 h-full opacity-10 pointer-events-none"
-              style={{
-                backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
-                backgroundSize: "20px 20px",
-              }}
-            />
-            <div className="relative flex items-center gap-4">
-              <div className="shrink-0 p-2.5 rounded-xl bg-white/15">
-                <SlidersHorizontal className="h-5 w-5 text-white" />
+        {/* Job search banner — summary if profile exists, onboarding CTA otherwise */}
+        {hasProfile ? (
+          <ProfileSummaryBanner
+            data={{
+              current_role:           userStatus?.current_role          ?? "",
+              experience_level:       userStatus?.experience_level      ?? "",
+              skills:                 userStatus?.skills                ?? [],
+              preferred_job_titles:   userStatus?.preferred_job_titles  ?? [],
+              preferred_locations:    userStatus?.preferred_locations   ?? [],
+              remote_work_preferred:  userStatus?.remote_work_preferred ?? false,
+              job_types:              userStatus?.job_types             ?? [],
+              resume_uploaded:        userStatus?.resume_uploaded       ?? false,
+              email_template_config:  (userStatus?.email_template_config as any) ?? null,
+            }}
+          />
+        ) : (
+          <Link href="/onboarding" className="group block">
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-5 flex items-center justify-between gap-4 hover:shadow-lg hover:shadow-indigo-200 transition-all">
+              <div className="absolute right-0 top-0 w-64 h-full opacity-10 pointer-events-none"
+                style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "20px 20px" }}
+              />
+              <div className="relative flex items-center gap-4">
+                <div className="shrink-0 p-2.5 rounded-xl bg-white/15">
+                  <SlidersHorizontal className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-white">Start Your Job Search</p>
+                  <p className="text-sm text-indigo-200 mt-0.5">
+                    Enter your skills, target role and upload your resume — we'll find and apply to matching jobs for you.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-base font-bold text-white">Start Your Job Search</p>
-                <p className="text-sm text-indigo-200 mt-0.5">
-                  Enter your skills, target role and upload your resume — we'll find and apply to matching jobs for you.
-                </p>
+              <div className="relative shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-indigo-700 text-sm font-bold group-hover:bg-indigo-50 transition-colors whitespace-nowrap">
+                Get Started
+                <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
               </div>
             </div>
-            <div className="relative shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-indigo-700 text-sm font-bold group-hover:bg-indigo-50 transition-colors whitespace-nowrap">
-              Get Started
-              <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </div>
-        </Link>
+          </Link>
+        )}
 
         {/* Daily limit bar */}
         <DailyLimitProgress />

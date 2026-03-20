@@ -11,9 +11,10 @@ interface DashboardShellProps {
     email?: string | null
     image?: string | null
   }
+  hasProfile?: boolean
 }
 
-export function DashboardShell({ children, user }: DashboardShellProps) {
+export function DashboardShell({ children, user, hasProfile }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
@@ -21,7 +22,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
       <DashboardSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <DashboardHeader user={user} setSidebarOpen={setSidebarOpen} />
+        <DashboardHeader user={user} setSidebarOpen={setSidebarOpen} hasProfile={hasProfile} />
         
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           {children}
