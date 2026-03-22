@@ -1,6 +1,10 @@
 import { google } from 'googleapis'
 import { prisma } from './prisma'
 import { TokenEncryption } from './encryption'
+import {
+  isDeliveryFailureOrSystemMessage,
+  parseEmailAddressFromHeader,
+} from './email-thread-filters'
 
 // Gmail API scopes we need
 const GMAIL_SCOPES = [
@@ -298,6 +302,29 @@ export class GmailService {
   }
 
   /**
+   * Pull latest messages for specific Gmail thread IDs (e.g. job application threads).
+   * Call this when loading the dashboard so replies appear without relying on a narrow inbox search.
+   */
+  static async syncGmailThreadsByIds(userId: string, gmailThreadIds: string[]): Promise<void> {
+    const unique = [...new Set(gmailThreadIds.filter((id): id is string => !!id && id.length > 0))]
+    if (unique.length === 0) return
+
+    try {
+      const gmail = await this.getGmailClient(userId)
+      const concurrency = 6
+      for (let i = 0; i < unique.length; i += concurrency) {
+        const batch = unique.slice(i, i + concurrency)
+        await Promise.all(
+          batch.map((threadId) => this.syncThreadMessages(userId, gmail, threadId))
+        )
+      }
+    } catch (error) {
+      console.error('Error syncing Gmail threads by id:', error)
+      throw error
+    }
+  }
+
+  /**
    * Sync Gmail messages for a user (get replies)
    */
   static async syncGmailMessages(userId: string, sinceTimestamp?: number): Promise<void> {
@@ -307,7 +334,7 @@ export class GmailService {
       // Get all threads that have new messages
       const query = sinceTimestamp
         ? `after:${Math.floor(sinceTimestamp / 1000)}`
-        : 'newer_than:10m' // Last 10 minutes by default
+        : 'newer_than:14d' // Wide enough for typical job-application follow-ups
 
       const threadsResponse = await gmail.users.threads.list({
         userId: 'me',
@@ -340,10 +367,20 @@ export class GmailService {
       const threadResponse = await gmail.users.threads.get({
         userId: 'me',
         id: threadId,
+        format: 'metadata',
       })
 
       const thread = threadResponse.data
       const messages = thread.messages || []
+      if (messages.length === 0) {
+        return
+      }
+
+      const creds = await prisma.gmailCredentials.findUnique({
+        where: { user_id: userId },
+        select: { email_address: true },
+      })
+      const userEmailNorm = creds?.email_address?.trim().toLowerCase() ?? null
 
       // Get or create thread record
       let emailThread = await prisma.emailThread.findUnique({
@@ -375,7 +412,7 @@ export class GmailService {
 
       // Process each message in the thread
       for (const message of messages) {
-        await this.processMessage(userId, emailThread.id, message)
+        await this.processMessage(userId, emailThread.id, message, userEmailNorm)
       }
 
       // Update thread metadata
@@ -396,7 +433,12 @@ export class GmailService {
   /**
    * Process individual message
    */
-  private static async processMessage(userId: string, threadId: string, message: GmailMessage): Promise<void> {
+  private static async processMessage(
+    userId: string,
+    threadId: string,
+    message: GmailMessage,
+    userEmailNorm: string | null
+  ): Promise<void> {
     try {
       // Check if message already exists
       const existingMessage = await prisma.emailLog.findFirst({
@@ -411,8 +453,19 @@ export class GmailService {
       const fromEmail = this.extractFromEmail(message)
       const toEmail = this.extractToEmail(message)
       const subject = this.extractSubject(message)
-      const direction = this.determineDirection(userId, fromEmail)
-      const isReply = this.isReply(message)
+
+      if (
+        isDeliveryFailureOrSystemMessage({
+          fromHeader: fromEmail,
+          subject,
+          snippet: message.snippet || '',
+        })
+      ) {
+        return
+      }
+
+      const direction = this.determineDirection(userEmailNorm, fromEmail)
+      const isReply = this.isReply(message, direction)
 
       // Create message log
       await prisma.emailLog.create({
@@ -427,7 +480,7 @@ export class GmailService {
           direction,
           gmail_timestamp: new Date(parseInt(message.internalDate!)),
           is_reply: isReply,
-          status: 'received',
+          status: direction === 'sent' ? 'sent' : 'received',
         },
       })
 
@@ -466,20 +519,22 @@ export class GmailService {
   /**
    * Determine if message is sent or received
    */
-  private static determineDirection(userId: string, fromEmail: string): 'sent' | 'received' {
-    // This is a simplified check - in production, you'd get the user's email from credentials
-    // For now, assume any message not from the user's domain is received
-    // You should enhance this with proper user email lookup
-    return fromEmail.includes('@gmail.com') ? 'sent' : 'received'
+  private static determineDirection(userEmailNorm: string | null, fromHeader: string): 'sent' | 'received' {
+    const fromAddr = parseEmailAddressFromHeader(fromHeader)
+    if (userEmailNorm && fromAddr && fromAddr === userEmailNorm) {
+      return 'sent'
+    }
+    return 'received'
   }
 
   /**
    * Check if message is a reply
    */
-  private static isReply(message: GmailMessage): boolean {
+  private static isReply(message: GmailMessage, direction: 'sent' | 'received'): boolean {
+    if (direction === 'sent') return false
     const subject = this.extractSubject(message)
-    return subject.toLowerCase().startsWith('re:') ||
-      subject.toLowerCase().includes('reply')
+    const sub = subject.toLowerCase()
+    return sub.startsWith('re:') || sub.includes('fwd:') || sub.includes('reply')
   }
 
   /**

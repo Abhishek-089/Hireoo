@@ -8,6 +8,7 @@ import { ProfileSummaryBanner } from "@/components/dashboard/ProfileSummaryBanne
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getScrapedApplicationMailStats } from "@/lib/dashboard-email-stats"
 import Link from "next/link"
 import { SlidersHorizontal, ArrowRight } from "lucide-react"
 
@@ -19,8 +20,7 @@ async function getDashboardStats(userId: string) {
   try {
     const [
       matchesCount,
-      applicationsCount,
-      repliesCount,
+      mailStats,
       avgScoreResult,
     ] = await Promise.all([
       prisma.scrapedPostMatch.count({
@@ -34,21 +34,7 @@ async function getDashboardStats(userId: string) {
           }
         }
       }),
-      prisma.scrapedApplication.count({
-        where: { user_id: userId, gmail_thread_id: { not: null } }
-      }),
-      prisma.scrapedApplication.findMany({
-        where: { user_id: userId, gmail_thread_id: { not: null } },
-        select: { gmail_thread_id: true }
-      }).then(async (apps: { gmail_thread_id: string | null }[]) => {
-        const threadIds = apps.map(a => a.gmail_thread_id).filter(Boolean) as string[]
-        if (threadIds.length === 0) return 0
-        const replies = await prisma.emailLog.groupBy({
-          by: ['thread_id'],
-          where: { user_id: userId, thread_id: { in: threadIds }, direction: 'received', is_reply: true },
-        })
-        return replies.length
-      }),
+      getScrapedApplicationMailStats(userId),
       prisma.scrapedPostMatch.aggregate({
         where: {
           user_id: userId,
@@ -63,7 +49,12 @@ async function getDashboardStats(userId: string) {
       ? Math.round(avgScoreResult._avg.match_score)
       : 0
 
-    return { jobMatches: matchesCount, emailsSent: applicationsCount, repliesReceived: repliesCount, avgMatchScore }
+    return {
+      jobMatches: matchesCount,
+      emailsSent: mailStats.applicationsWithGmail,
+      repliesReceived: mailStats.applicationsWithHumanReply,
+      avgMatchScore,
+    }
   } catch (error) {
     console.error("Error fetching dashboard stats:", error)
     return { jobMatches: 0, emailsSent: 0, repliesReceived: 0, avgMatchScore: 0 }

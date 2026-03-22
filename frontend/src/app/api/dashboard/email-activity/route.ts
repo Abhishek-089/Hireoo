@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { GmailService } from "@/lib/gmail-service"
+import {
+  isDeliveryFailureOrSystemMessage,
+  isHumanRecruiterReplyMessage,
+} from "@/lib/email-thread-filters"
 
 // Helper function to extract company name from email domain
 function getCompanyFromEmail(email: string): string {
@@ -62,6 +67,20 @@ export async function GET(request: NextRequest) {
       .map((app: any) => app.gmail_thread_id)
       .filter((id: any): id is string => !!id)
 
+    // 2b. Gmail sync is expensive (N API calls). Only run when ?sync=1 — otherwise return DB quickly.
+    const doSync = request.nextUrl.searchParams.get("sync") === "1"
+    const gmailLinked = await prisma.gmailCredentials.findUnique({
+      where: { user_id: session.user.id },
+      select: { id: true },
+    })
+    if (doSync && gmailLinked && threadIds.length > 0) {
+      try {
+        await GmailService.syncGmailThreadsByIds(session.user.id, threadIds)
+      } catch (e) {
+        console.error("email-activity Gmail sync:", e)
+      }
+    }
+
     // 3. Fetch threads with messages
     const threads = await prisma.emailThread.findMany({
       where: {
@@ -83,10 +102,10 @@ export async function GET(request: NextRequest) {
     const activityData = applications.map((app: any) => {
       const thread = threads.find((t: any) => t.gmail_thread_id === app.gmail_thread_id)
 
-      // Determine statuc
+      // Status: real recruiter replies only (not mailer-daemon / DSN bounces)
       let status = 'sent'
       if (thread) {
-        const hasReply = thread.messages.some((m: any) => m.direction === 'received')
+        const hasReply = thread.messages.some((m: any) => isHumanRecruiterReplyMessage(m))
         if (hasReply) status = 'replied'
       }
 
@@ -126,8 +145,16 @@ export async function GET(request: NextRequest) {
 
         const threadMessages = thread.messages
           .filter((m: any) => {
-            // Filter out message if it has same ID as app message ID (if we logged it perfectly)
             if (app.gmail_message_id && m.gmail_message_id === app.gmail_message_id) return false
+            if (
+              isDeliveryFailureOrSystemMessage({
+                fromHeader: m.from_email || '',
+                subject: m.subject || '',
+                snippet: m.snippet || '',
+              })
+            ) {
+              return false
+            }
             return true
           })
           .map((m: any) => ({
@@ -137,13 +164,18 @@ export async function GET(request: NextRequest) {
 
         messages = [...messages, ...threadMessages]
 
-        // Re-sort just in case
         messages.sort((a: any, b: any) => new Date(a.gmail_timestamp).getTime() - new Date(b.gmail_timestamp).getTime())
       }
+
+      const lastTs = messages.reduce((max: number, m: any) => {
+        const t = new Date(m.gmail_timestamp).getTime()
+        return t > max ? t : max
+      }, new Date(app.sent_at).getTime())
 
       return {
         id: app.id,
         appliedAt: app.sent_at,
+        lastActivityAt: new Date(lastTs).toISOString(),
         hrEmail: app.hr_email,
         job: {
           title: app.scrapedPost.job?.title || "Job Application",
@@ -156,6 +188,16 @@ export async function GET(request: NextRequest) {
         },
         status
       }
+    })
+
+    // Replied threads first (newest recruiter activity wins among those), then awaiting, by last activity
+    activityData.sort((a: any, b: any) => {
+      const aReplied = a.status === 'replied' ? 1 : 0
+      const bReplied = b.status === 'replied' ? 1 : 0
+      if (bReplied !== aReplied) return bReplied - aReplied
+      return (
+        new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime()
+      )
     })
 
     return NextResponse.json(activityData)

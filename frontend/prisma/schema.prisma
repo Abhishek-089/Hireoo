@@ -215,10 +215,12 @@ model EmailThread {
 model Subscription {
   id                    String    @id @default(cuid())
   user_id               String    @unique
-  stripe_customer_id    String?   @unique // Stripe customer ID
-  stripe_subscription_id String?  @unique // Stripe subscription ID
-  stripe_price_id       String?   // Current price ID
-  plan_name             String    // free, pro_monthly, pro_yearly
+  stripe_customer_id    String?   @unique // Stripe customer ID (legacy)
+  stripe_subscription_id String?  @unique // Stripe subscription ID (legacy)
+  stripe_price_id       String?   // Stripe price ID (legacy)
+  razorpay_subscription_id String? @unique // Razorpay subscription ID
+  razorpay_payment_id   String?   // Latest successful Razorpay payment ID
+  plan_name             String    // free, premium, pro
   status                String    @default("active") // active, canceled, past_due, incomplete
   current_period_start  DateTime?
   current_period_end    DateTime?
@@ -231,6 +233,7 @@ model Subscription {
   @@index([user_id])
   @@index([stripe_customer_id])
   @@index([stripe_subscription_id])
+  @@index([razorpay_subscription_id])
   @@index([status])
 }
 

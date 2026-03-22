@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { ScrapedPostMatchingService } from "@/lib/scraped-post-matching"
+import { getScrapedApplicationMailStats } from "@/lib/dashboard-email-stats"
 
 type JobMatchesPageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -19,7 +20,7 @@ async function getJobMatchStats(userId: string) {
       scrapedPost: { text: { contains: '@' } },
     }
 
-    const [totalMatches, totalApplied, avgMatchScoreResult, emailStats] = await Promise.all([
+    const [totalMatches, totalApplied, avgMatchScoreResult, mailStats] = await Promise.all([
       prisma.scrapedPostMatch.count({
         where: {
           ...allTimeShownFilter,
@@ -43,26 +44,11 @@ async function getJobMatchStats(userId: string) {
         where: allTimeShownFilter,
         _avg: { match_score: true }
       }),
-      Promise.all([
-        prisma.scrapedApplication.count({
-          where: { user_id: userId, gmail_thread_id: { not: null } }
-        }),
-        prisma.scrapedApplication.findMany({
-          where: { user_id: userId, gmail_thread_id: { not: null } },
-          select: { gmail_thread_id: true }
-        }).then(async (apps: { gmail_thread_id: string | null }[]) => {
-          const threadIds = apps.map(a => a.gmail_thread_id).filter(Boolean) as string[]
-          if (threadIds.length === 0) return 0
-          const replies = await prisma.emailLog.groupBy({
-            by: ['thread_id'],
-            where: { user_id: userId, thread_id: { in: threadIds }, direction: 'received', is_reply: true },
-          })
-          return replies.length
-        })
-      ])
+      getScrapedApplicationMailStats(userId),
     ])
 
-    const [applicationsSent, repliesReceived] = emailStats
+    const applicationsSent = mailStats.applicationsWithGmail
+    const repliesReceived = mailStats.applicationsWithHumanReply
     const responseRate = applicationsSent > 0
       ? Math.round((repliesReceived / applicationsSent) * 100)
       : 0

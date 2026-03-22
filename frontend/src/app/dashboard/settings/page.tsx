@@ -31,6 +31,11 @@ export default async function SettingsPage() {
       extension_installed: true,
       email_template_config: true,
       created_at: true,
+      resumes: {
+        orderBy: { created_at: "desc" },
+        take: 1,
+        select: { file_name: true },
+      },
     },
   })
 
@@ -56,6 +61,7 @@ export default async function SettingsPage() {
         extensionInstalled: user.extension_installed,
         emailTemplateConfig: user.email_template_config as any,
         createdAt: user.created_at.toISOString(),
+        latestResumeFileName: user.resumes[0]?.file_name ?? null,
       }}
     />
   )

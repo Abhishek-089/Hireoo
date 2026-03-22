@@ -1,15 +1,35 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { ExternalLink, Mail, Building2, Briefcase, CheckCircle2, Clock, MessageSquare } from 'lucide-react'
+import { parseEmailAddressFromHeader } from '@/lib/email-thread-filters'
 
 interface EmailActivityItem {
   id: string
   appliedAt: string
+  lastActivityAt?: string
   hrEmail: string
   job: { title: string; company: string; url: string }
   status: string
   thread: any
+}
+
+function senderDisplay(fromHeader: string, hrEmail: string, isMe: boolean): { name: string; initials: string } {
+  if (isMe) return { name: 'You', initials: 'Me' }
+  const quoted = fromHeader.match(/^"([^"]+)"\s*</)
+  const loose = fromHeader.match(/^([^<]+?)\s*</)
+  const rawName = (quoted?.[1] || loose?.[1] || '').trim().replace(/^"|"$/g, '')
+  if (rawName && !rawName.includes('@')) {
+    const parts = rawName.split(/\s+/).filter(Boolean)
+    const initials =
+      parts.length >= 2
+        ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+        : rawName.slice(0, 2).toUpperCase()
+    return { name: rawName, initials }
+  }
+  const addr = parseEmailAddressFromHeader(fromHeader) || hrEmail
+  const local = addr.split('@')[0] || 'Recruiter'
+  return { name: local, initials: addr.slice(0, 2).toUpperCase() }
 }
 
 export function EmailThreadView({ item }: { item: EmailActivityItem | null }) {
@@ -25,7 +45,13 @@ export function EmailThreadView({ item }: { item: EmailActivityItem | null }) {
     )
   }
 
-  const messages = item.thread?.messages || []
+  const messages = useMemo(() => {
+    const raw = item.thread?.messages || []
+    return [...raw].sort(
+      (a: any, b: any) =>
+        new Date(b.gmail_timestamp).getTime() - new Date(a.gmail_timestamp).getTime()
+    )
+  }, [item.thread?.messages])
   const isReplied = item.status === 'replied'
 
   return (
@@ -82,8 +108,8 @@ export function EmailThreadView({ item }: { item: EmailActivityItem | null }) {
         ) : (
           messages.map((msg: any) => {
             const isMe = msg.direction === 'sent'
-            const senderName = isMe ? 'You' : item.hrEmail.split('@')[0]
-            const initials = isMe ? 'Me' : item.hrEmail.slice(0, 2).toUpperCase()
+            const fromHeader = typeof msg.from_email === 'string' ? msg.from_email : ''
+            const { name: senderName, initials } = senderDisplay(fromHeader, item.hrEmail, isMe)
 
             return (
               <div key={msg.id} className={cn("flex gap-3", isMe ? "flex-row-reverse" : "")}>

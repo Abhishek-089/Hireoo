@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { EmailList } from '@/components/dashboard/email-activity/EmailList'
 import { EmailThreadView } from '@/components/dashboard/email-activity/EmailThreadView'
 import { Loader2, RefreshCw, Mail } from 'lucide-react'
+
+const AUTO_REFRESH_MS = 60_000
 
 export default function EmailActivityPage() {
   const [items, setItems] = useState<any[]>([])
@@ -11,23 +13,45 @@ export default function EmailActivityPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = async () => {
+  const loadEmailActivity = useCallback(async (opts?: { silent?: boolean; sync?: boolean }) => {
+    const silent = opts?.silent ?? false
+    const sync = opts?.sync ?? false
+    const url = sync
+      ? '/api/dashboard/email-activity?sync=1'
+      : '/api/dashboard/email-activity'
     try {
-      setLoading(true)
-      const res = await fetch('/api/dashboard/email-activity')
+      if (!silent) setLoading(true)
+      setError(null)
+      const res = await fetch(url)
       if (!res.ok) throw new Error('Failed to fetch data')
       const data = await res.json()
       setItems(data)
-      if (data.length > 0 && !selectedId) setSelectedId(data[0].id)
+      setSelectedId((prev) => {
+        if (!data.length) return null
+        if (!prev) return data[0].id
+        if (!data.some((i: { id: string }) => i.id === prev)) return data[0].id
+        return prev
+      })
     } catch (err) {
-      setError('Failed to load email activity.')
+      if (!silent) setError('Failed to load email activity.')
       console.error(err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => {
+    void loadEmailActivity()
+    // Pull Gmail after first paint (DB-only response is fast; this updates replies in the background)
+    const bg = setTimeout(() => void loadEmailActivity({ silent: true, sync: true }), 250)
+    return () => clearTimeout(bg)
+  }, [loadEmailActivity])
+
+  useEffect(() => {
+    // Poll DB only — avoids 30+ Gmail calls every minute
+    const id = setInterval(() => void loadEmailActivity({ silent: true, sync: false }), AUTO_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [loadEmailActivity])
 
   const selectedItem = items.find(i => i.id === selectedId) || null
   const repliedCount = items.filter(i => i.status === 'replied').length
@@ -51,7 +75,7 @@ export default function EmailActivityPage() {
             </div>
           )}
           <button
-            onClick={fetchData}
+            onClick={() => void loadEmailActivity({ sync: true })}
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors cursor-pointer"
           >

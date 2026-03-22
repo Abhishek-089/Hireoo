@@ -1,24 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { StripeService } from "@/lib/stripe"
+import { RazorpayService } from "@/lib/razorpay"
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get subscription details
-    const subscription = await StripeService.getSubscription(session.user.id)
-
-    // Get usage limits and current usage
-    const usageLimits = await StripeService.checkUsageLimits(session.user.id)
+    const [subscription, usageLimits] = await Promise.all([
+      RazorpayService.getSubscription(session.user.id),
+      RazorpayService.checkUsageLimits(session.user.id),
+    ])
 
     return NextResponse.json({
       subscription: {
@@ -28,10 +24,10 @@ export async function GET(request: NextRequest) {
         currentPeriodStart: subscription.current_period_start,
         currentPeriodEnd: subscription.current_period_end,
         cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        razorpaySubscriptionId: subscription.razorpay_subscription_id,
       },
       usage: usageLimits,
     })
-
   } catch (error) {
     console.error("Subscription status error:", error)
     return NextResponse.json(
@@ -40,5 +36,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
-

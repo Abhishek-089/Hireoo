@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { callGroq } from "./services/ai.service"
 import { prisma } from "./prisma"
 
@@ -164,6 +165,13 @@ export async function enrichScrapedPost(
     console.log(`[AI Enrichment] Created Job for ScrapedPost ${scrapedPostId}`)
     return true
   } catch (error) {
+    // Two matchers can enrich the same post in parallel; the second create hits unique `scraped_post_id`.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return true
+    }
     console.error(`[AI Enrichment] Failed for post ${scrapedPostId}:`, error)
     return false
   }

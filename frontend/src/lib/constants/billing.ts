@@ -5,7 +5,7 @@ export const SUBSCRIPTION_PLANS = {
     displayName: 'Free',
     price: 0,
     currency: 'inr',
-    stripePriceId: null,
+    razorpayPlanId: null as string | null,
     features: {
       dailyJobMatches: 10,
       monthlyJobMatches: 10,
@@ -22,7 +22,7 @@ export const SUBSCRIPTION_PLANS = {
     price: 149,
     currency: 'inr',
     interval: 'month',
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM || '',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_ID_PREMIUM || '',
     features: {
       dailyJobMatches: 25,
       monthlyJobMatches: -1,
@@ -39,7 +39,7 @@ export const SUBSCRIPTION_PLANS = {
     price: 249,
     currency: 'inr',
     interval: 'month',
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO || '',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_ID_PRO || '',
     features: {
       dailyJobMatches: 50,
       monthlyJobMatches: -1,

@@ -61,8 +61,13 @@ export function FeatureGrid() {
           {/* Header */}
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight leading-tight">
-              From sign-up to interviews
-              <span className="text-gray-300"> in 4 steps</span>
+              From sign-up to interviews{" "}
+              <span className="relative inline-block">
+                <span className="text-indigo-500">in 4 steps.</span>
+                <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 8" fill="none">
+                  <path d="M2 6C60 2 140 1 298 6" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round"/>
+                </svg>
+              </span>
             </h2>
             <p className="mt-3 text-gray-500 max-w-md mx-auto">
               Most users are sending their first application within 10 minutes.
@@ -121,8 +126,13 @@ export function FeatureGrid() {
                 Features
               </span>
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight leading-tight">
-                Everything handled.
-                <span className="text-gray-300"> Nothing to manage.</span>
+                Everything handled.{" "}
+                <span className="relative inline-block">
+                  <span className="text-indigo-500">Nothing to manage.</span>
+                  <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 8" fill="none">
+                    <path d="M2 6C60 2 140 1 298 6" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                </span>
               </h2>
             </div>
             <Link

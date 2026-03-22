@@ -64,8 +64,13 @@ export function PricingTable() {
         <div className="text-center mb-12">
 
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight leading-tight">
-            Simple pricing.
-            <span className="text-gray-300"> No surprises.</span>
+            Simple pricing.{" "}
+            <span className="relative inline-block">
+              <span className="text-indigo-500">No surprises.</span>
+              <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 8" fill="none">
+                <path d="M2 6C60 2 140 1 298 6" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+            </span>
           </h2>
           <p className="mt-3 text-gray-500">
             Start free. Upgrade when you&apos;re ready. Cancel anytime.

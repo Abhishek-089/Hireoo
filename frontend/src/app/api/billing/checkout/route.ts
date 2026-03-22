@@ -1,58 +1,40 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { StripeService } from "@/lib/stripe"
-import { SUBSCRIPTION_PLANS } from "@/lib/constants/billing"
+import { RazorpayService } from "@/lib/razorpay"
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { planName } = await request.json()
 
     if (!planName || !['premium', 'pro'].includes(planName)) {
       return NextResponse.json(
-        { error: "Invalid plan name. Must be 'premium' or 'pro'" },
+        { error: "Invalid plan. Must be 'premium' or 'pro'" },
         { status: 400 }
       )
     }
 
-    const plan = SUBSCRIPTION_PLANS[planName.toUpperCase() as keyof typeof SUBSCRIPTION_PLANS]
-
-    if (!plan.stripePriceId) {
-      return NextResponse.json(
-        { error: "Plan not configured properly" },
-        { status: 500 }
-      )
-    }
-
-    // Create checkout session
-    const checkoutSession = await StripeService.createCheckoutSession(
+    const subscription = await RazorpayService.createSubscription(
       session.user.id,
-      plan.stripePriceId,
-      `${process.env.NEXTAUTH_URL}/dashboard/billing?success=true`,
-      `${process.env.NEXTAUTH_URL}/dashboard/billing?canceled=true`
+      planName as 'premium' | 'pro'
     )
 
     return NextResponse.json({
-      checkoutUrl: checkoutSession.url,
-      sessionId: checkoutSession.id,
+      subscriptionId: subscription.id,
+      // short_url can be used as a fallback hosted payment page
+      shortUrl: subscription.short_url ?? null,
     })
-
   } catch (error) {
-    console.error("Checkout session creation error:", error)
+    console.error("Razorpay checkout error:", error)
     return NextResponse.json(
-      { error: "Failed to create checkout session" },
+      { error: "Failed to create subscription" },
       { status: 500 }
     )
   }
 }
-
-

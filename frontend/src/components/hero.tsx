@@ -135,7 +135,7 @@ export function Hero() {
             The{" "}
             <span className="relative inline-block">
               <span className="text-indigo-500">fastest way</span>
-              <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 8" fill="none">
+              <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 300 8" fill="none">
                 <path d="M2 6C60 2 140 1 298 6" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round"/>
               </svg>
             </span>

@@ -1,11 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSession } from 'next-auth/react'
 import {
   CreditCard, Zap, Crown, CheckCircle, ExternalLink,
   Loader2, AlertCircle, RefreshCw, Star, Shield, Clock, Gem,
+  RefreshCcw, BanknoteIcon, BadgeCheck,
 } from 'lucide-react'
 import { SUBSCRIPTION_PLANS } from '@/lib/constants/billing'
+
+declare global {
+  interface Window {
+    Razorpay: any
+  }
+}
 
 interface SubscriptionData {
   subscription: {
@@ -15,6 +23,7 @@ interface SubscriptionData {
     currentPeriodStart: Date | null
     currentPeriodEnd: Date | null
     cancelAtPeriodEnd: boolean
+    razorpaySubscriptionId: string | null
   }
   usage: {
     canUse: boolean
@@ -146,11 +155,11 @@ const FAQ = [
 ]
 
 export default function BillingPage() {
+  const { data: session } = useSession()
   const [data, setData] = useState<SubscriptionData | null>(null)
   const [dailyLimit, setDailyLimit] = useState<DailyLimitData | null>(null)
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
-  const [portalLoading, setPortalLoading] = useState(false)
   const [openFaq, setOpenFaq] = useState<number | null>(null)
 
   useEffect(() => { fetchData() }, [])
@@ -172,43 +181,112 @@ export default function BillingPage() {
     }
   }
 
+  const loadRazorpayScript = useCallback((): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (window.Razorpay) { resolve(); return }
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error('Failed to load Razorpay'))
+      document.body.appendChild(script)
+    })
+  }, [])
+
   const handleUpgrade = async (planKey: string) => {
     setCheckoutLoading(planKey)
     try {
+      // Step 1: Create Razorpay subscription on the server
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planName: planKey }),
       })
-      if (res.ok) {
-        const { checkoutUrl } = await res.json()
-        window.location.href = checkoutUrl
+
+      if (!res.ok) {
+        console.error('Failed to create subscription')
+        setCheckoutLoading(null)
+        return
       }
-    } catch { /* silently fail */ } finally {
+
+      const { subscriptionId } = await res.json()
+
+      // Step 2: Load Razorpay checkout script
+      await loadRazorpayScript()
+
+      // Step 3: Open Razorpay modal
+      const planLabel = planKey === 'premium' ? 'Premium — ₹149/mo' : 'Pro — ₹249/mo'
+
+      const rzp = new window.Razorpay({
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        subscription_id: subscriptionId,
+        name: 'Hireoo',
+        description: planLabel,
+        image: '/logo.png',
+        handler: async (response: {
+          razorpay_payment_id: string
+          razorpay_subscription_id: string
+          razorpay_signature: string
+        }) => {
+          // Step 4: Verify payment on the server
+          const verifyRes = await fetch('/api/billing/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_subscription_id: response.razorpay_subscription_id,
+              razorpay_signature: response.razorpay_signature,
+              planName: planKey,
+            }),
+          })
+
+          if (verifyRes.ok) {
+            await fetchData()
+          }
+          setCheckoutLoading(null)
+        },
+        prefill: {
+          email: session?.user?.email ?? '',
+          name: session?.user?.name ?? '',
+        },
+        theme: { color: '#6366f1' },
+        modal: {
+          ondismiss: () => setCheckoutLoading(null),
+        },
+      })
+
+      rzp.open()
+    } catch (err) {
+      console.error('Razorpay checkout error:', err)
       setCheckoutLoading(null)
     }
   }
 
-  const handleManageSubscription = async () => {
-    setPortalLoading(true)
+  const handleCancelSubscription = async () => {
+    if (!confirm('Are you sure you want to cancel? You will keep access until the end of the current billing period.')) return
     try {
-      const res = await fetch('/api/billing/portal', { method: 'POST' })
-      if (res.ok) {
-        const { portalUrl } = await res.json()
-        window.location.href = portalUrl
-      }
-    } catch { /* silently fail */ } finally {
-      setPortalLoading(false)
-    }
+      const res = await fetch('/api/billing/cancel', { method: 'POST' })
+      if (res.ok) await fetchData()
+    } catch { /* silently fail */ }
   }
 
   const currentPlan = data?.subscription.planName || 'free'
   const isPaid = ['premium', 'pro'].includes(currentPlan)
-  const periodEnd = data?.subscription.currentPeriodEnd
-    ? new Date(data.subscription.currentPeriodEnd).toLocaleDateString('en-IN', { month: 'long', day: 'numeric', year: 'numeric' })
+  const isAutopayActive =
+    isPaid &&
+    data?.subscription.status === 'active' &&
+    !!data?.subscription.razorpaySubscriptionId &&
+    !data?.subscription.cancelAtPeriodEnd
+
+  const nextChargeDate = data?.subscription.currentPeriodEnd
+    ? new Date(data.subscription.currentPeriodEnd)
     : null
+  const nextChargeDateLabel = nextChargeDate
+    ? nextChargeDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
+  const nextChargeAmount = PLANS.find(p => p.key === currentPlan)?.price ?? null
 
   const planDisplayName = PLANS.find(p => p.key === currentPlan)?.name ?? currentPlan
+  const portalLoading = false
 
   if (loading) {
     return (
@@ -257,38 +335,75 @@ export default function BillingPage() {
               <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
                 data?.subscription.status === 'active'
                   ? 'bg-emerald-50 text-emerald-700'
+                  : data?.subscription.status === 'past_due'
+                  ? 'bg-red-50 text-red-700'
                   : 'bg-gray-100 text-gray-500'
               }`}>
                 {data?.subscription.status ?? 'active'}
               </span>
+              {isAutopayActive && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
+                  <RefreshCcw className="h-3 w-3" />
+                  Autopay ON
+                </span>
+              )}
             </div>
 
-            {periodEnd && (
+            {nextChargeDateLabel && isPaid && (
               <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
                 <Clock className="h-3.5 w-3.5" />
-                {data?.subscription.cancelAtPeriodEnd ? `Expires on ${periodEnd}` : `Renews on ${periodEnd}`}
+                {data?.subscription.cancelAtPeriodEnd
+                  ? `Access until ${nextChargeDateLabel}`
+                  : `Next autopay on ${nextChargeDateLabel}`}
               </p>
             )}
 
             {data?.subscription.cancelAtPeriodEnd && (
               <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 text-xs text-amber-700">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                Your plan is set to cancel at the end of this billing period.
+                Autopay cancelled — you keep access until the end of this billing period.
+              </div>
+            )}
+
+            {data?.subscription.status === 'past_due' && (
+              <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-xs text-red-700">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Autopay failed — please update your payment method to restore access.
               </div>
             )}
           </div>
 
-          {isPaid && (
+          {isPaid && !data?.subscription.cancelAtPeriodEnd && (
             <button
-              onClick={handleManageSubscription}
-              disabled={portalLoading}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors shrink-0"
+              onClick={handleCancelSubscription}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shrink-0"
             >
-              {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-              Manage Subscription
+              <ExternalLink className="h-4 w-4" />
+              Cancel Autopay
             </button>
           )}
         </div>
+
+        {/* Autopay info strip */}
+        {isAutopayActive && nextChargeDateLabel && nextChargeAmount && (
+          <div className="mt-5 pt-4 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2.5 flex-1 px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100">
+              <BanknoteIcon className="h-4 w-4 text-indigo-500 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-indigo-700">
+                  ₹{nextChargeAmount} will be auto-debited on {nextChargeDateLabel}
+                </p>
+                <p className="text-[11px] text-indigo-400 mt-0.5">
+                  Renews every month on the same date · Cancel anytime before the charge date
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-100 shrink-0">
+              <BadgeCheck className="h-4 w-4 text-emerald-600" />
+              <span className="text-xs font-semibold text-emerald-700">Mandate active</span>
+            </div>
+          </div>
+        )}
 
         {/* Daily job matches usage */}
         {dailyLimit && (
@@ -409,12 +524,10 @@ export default function BillingPage() {
                     </button>
                   ) : isDowngrade ? (
                     <button
-                      onClick={handleManageSubscription}
-                      disabled={portalLoading}
-                      className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                      onClick={handleCancelSubscription}
+                      className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
                     >
-                      {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Manage Plan
+                      Cancel to Free
                     </button>
                   ) : (
                     <div className="py-2.5 text-center text-sm text-gray-400">Free forever</div>

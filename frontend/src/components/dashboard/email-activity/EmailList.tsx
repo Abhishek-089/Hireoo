@@ -6,6 +6,7 @@ import { CheckCircle2, Clock } from 'lucide-react'
 interface EmailActivityItem {
   id: string
   appliedAt: string
+  lastActivityAt?: string
   hrEmail: string
   job: { title: string; company: string; url: string }
   status: string
@@ -25,6 +26,7 @@ export function EmailList({ items, selectedId, onSelect }: EmailListProps) {
         const isSelected = selectedId === item.id
         const isReplied = item.status === 'replied'
         const initials = item.job.company.slice(0, 2).toUpperCase()
+        const listTime = item.lastActivityAt || item.appliedAt
 
         return (
           <button
@@ -53,7 +55,7 @@ export function EmailList({ items, selectedId, onSelect }: EmailListProps) {
                     {item.job.company}
                   </span>
                   <span className="text-[11px] text-gray-400 shrink-0">
-                    {formatDistanceToNow(new Date(item.appliedAt), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(listTime), { addSuffix: true })}
                   </span>
                 </div>
 

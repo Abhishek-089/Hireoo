@@ -181,6 +181,12 @@
   }
 }
 
+/* Dashboard sidebar: pointer over full row (text + icons); some browsers/SVGs otherwise show default/text cursor */
+.dashboard-sidebar a,
+.dashboard-sidebar a * {
+  cursor: pointer !important;
+}
+
 .animate-float { animation: float 6s ease-in-out infinite; }
 .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
 .animate-gradient-shift { animation: gradient-shift 8s ease infinite; background-size: 200% 200%; }

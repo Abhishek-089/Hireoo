@@ -42,12 +42,12 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-60 flex flex-col bg-white border-r border-gray-100 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto",
+        "dashboard-sidebar fixed inset-y-0 left-0 z-50 w-60 flex flex-col bg-white border-r border-gray-100 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Logo */}
         <div className="flex items-center justify-between h-14 px-5 border-b border-gray-100">
-          <Link href="/dashboard" className="flex items-center">
+          <Link href="/dashboard" className="flex items-center cursor-pointer">
             <Image
               src="/Hireo-logo.png"
               alt="Hireoo"
@@ -80,7 +80,7 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
                   if (!isActive) posthog.capture("dashboard_nav_clicked", { section: item.name })
                 }}
                 className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium",
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer",
                   "transition-all duration-200 ease-out",
                   isActive
                     ? "bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-100"
@@ -107,7 +107,7 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
           {/* Upgrade CTA */}
           <Link
             href="/dashboard/billing"
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-200"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-200 cursor-pointer"
           >
             <Star className="h-4 w-4" />
             Upgrade Now
@@ -116,7 +116,7 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
           {/* Help / FAQ */}
           <Link
             href="/faq"
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 active:scale-95 transition-all"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 active:scale-95 transition-all cursor-pointer"
           >
             <HelpCircle className="h-4 w-4" />
             Help - FAQ

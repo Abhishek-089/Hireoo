@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { extractEmails } from "@/lib/utils"
+import { isDeliveryFailureOrSystemMessage } from "@/lib/email-thread-filters"
 
 export async function ScrapedPosts({ page = 1 }: { page?: number }) {
   const session = await getServerSession(authOptions)
@@ -167,32 +168,52 @@ export async function ScrapedPosts({ page = 1 }: { page?: number }) {
 
       if (application?.gmail_thread_id) {
         try {
-          const emailLogs = await prisma.emailLog.findMany({
+          const emailThread = await prisma.emailThread.findUnique({
             where: {
-              user_id: userId,
-              thread_id: application.gmail_thread_id,
-              direction: 'received',
-              is_reply: true,
+              user_id_gmail_thread_id: {
+                user_id: userId,
+                gmail_thread_id: application.gmail_thread_id,
+              },
             },
-            select: {
-              id: true,
-              from_email: true,
-              subject: true,
-              snippet: true,
-              sent_at: true,
-            },
-            orderBy: { sent_at: 'desc' },
-            take: 5,
+            select: { id: true },
           })
 
-          replies = emailLogs.map((log: any) => ({
-            id: log.id,
-            from_email: log.from_email,
-            subject: log.subject,
-            body_text: log.snippet || '',
-            received_at: log.sent_at,
-            is_read: false,
-          }))
+          if (emailThread) {
+            const emailLogs = await prisma.emailLog.findMany({
+              where: {
+                user_id: userId,
+                thread_id: emailThread.id,
+                direction: 'received',
+              },
+              select: {
+                id: true,
+                from_email: true,
+                subject: true,
+                snippet: true,
+                sent_at: true,
+              },
+              orderBy: { sent_at: 'desc' },
+              take: 5,
+            })
+
+            replies = emailLogs
+              .filter(
+                (log: any) =>
+                  !isDeliveryFailureOrSystemMessage({
+                    fromHeader: log.from_email || '',
+                    subject: log.subject || '',
+                    snippet: log.snippet || '',
+                  })
+              )
+              .map((log: any) => ({
+                id: log.id,
+                from_email: log.from_email,
+                subject: log.subject,
+                body_text: log.snippet || '',
+                received_at: log.sent_at,
+                is_read: false,
+              }))
+          }
         } catch (error) {
           console.error('Error fetching email replies:', error)
         }

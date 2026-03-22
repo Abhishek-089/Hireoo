@@ -8,8 +8,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  User, Briefcase, MapPin, X, Plus, Save, CheckCircle2,
-  Loader2, LogOut, Mail, Shield, Wrench,
+  User, MapPin, X, Plus, Save, CheckCircle2,
+  Loader2, LogOut, Mail, Shield, Wrench, SlidersHorizontal,
+  FileText,
 } from "lucide-react"
 
 interface SettingsData {
@@ -28,6 +29,7 @@ interface SettingsData {
   extensionInstalled: boolean
   emailTemplateConfig: any
   createdAt: string
+  latestResumeFileName: string | null
 }
 
 const EXPERIENCE_LEVELS = [
@@ -61,6 +63,56 @@ const POPULAR_JOB_TITLES = [
   "DevOps Engineer", "Data Scientist", "Data Engineer",
   "Machine Learning Engineer", "QA Engineer", "Technical Writer",
 ]
+
+/** Maps stored experience_level values (settings + onboarding) to a readable label */
+const EXPERIENCE_LABEL_BY_VALUE: Record<string, string> = {
+  entry: "Entry Level (0–2 years)",
+  junior: "Junior (2–4 years)",
+  mid: "Mid-Level (4–7 years)",
+  senior: "Senior (7–10 years)",
+  lead: "Lead / Principal (10+ years)",
+  executive: "Executive / C-Suite",
+  "0-1": "0–1 Years (Entry Level)",
+  "1-3": "1–3 Years (Junior)",
+  "3-5": "3–5 Years (Mid-Level)",
+  "5-10": "5–10 Years (Senior)",
+  "10+": "10+ Years (Lead / Architect)",
+}
+
+function formatExperienceLabel(level: string): string {
+  if (!level?.trim()) return "—"
+  return EXPERIENCE_LABEL_BY_VALUE[level] ?? level.replace(/-/g, " ")
+}
+
+function formatJobTypeLabels(ids: string[]): string[] {
+  if (!ids?.length) return []
+  return ids.map((id) => JOB_TYPES.find((j) => j.id === id)?.label ?? id.replace(/-/g, " "))
+}
+
+function formatEmailFormatPreview(config: { templateName?: string; templateId?: string } | null | undefined): string {
+  if (!config) return "Not set"
+  if (config.templateName?.trim()) return config.templateName
+  if (config.templateId) {
+    const map: Record<string, string> = {
+      present_yourself: "Warm & Personal",
+      direct_application: "Professional",
+      expressive: "Bold & Direct",
+    }
+    return map[config.templateId] ?? config.templateId.replace(/_/g, " ")
+  }
+  return "Custom template"
+}
+
+function PreferenceRow({ label, value, children }: { label: string; value?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[minmax(8rem,11rem)_1fr] gap-1 sm:gap-4 py-3 border-b border-gray-50 last:border-0">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+      <div className="text-sm text-gray-900 min-h-[1.25rem]">
+        {children ?? (value === undefined || value === "" || value === null ? <span className="text-gray-400">—</span> : value)}
+      </div>
+    </div>
+  )
+}
 
 function Section({ icon: Icon, title, description, children }: {
   icon: React.ComponentType<{ className?: string }>
@@ -219,113 +271,93 @@ export function SettingsClient({ initialData }: { initialData: SettingsData }) {
             <Label className="text-xs font-medium text-gray-700">Email</Label>
             <Input className={inputClass + " bg-gray-50"} value={data.email} disabled />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-gray-700">Current Role</Label>
-            <Input className={inputClass} value={data.currentRole}
-              onChange={(e) => setData((p) => ({ ...p, currentRole: e.target.value }))} placeholder="e.g. Software Engineer" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-gray-700">Experience Level</Label>
-            <Select value={data.experienceLevel} onValueChange={(v) => setData((p) => ({ ...p, experienceLevel: v }))}>
-              <SelectTrigger className={inputClass}>
-                <SelectValue placeholder="Select level" />
-              </SelectTrigger>
-              <SelectContent>
-                {EXPERIENCE_LEVELS.map((l) => (
-                  <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+        </div>
+      </Section>
+
+      {/* Saved job preferences (read-only snapshot of DB / onboarding) */}
+      <Section
+        icon={SlidersHorizontal}
+        title="Job search preferences"
+        description="What we use to match jobs and format your outreach — from your saved profile"
+      >
+        <div className="rounded-xl border border-gray-100 bg-gray-50/50 px-4 sm:px-5 -mx-1">
+          <PreferenceRow label="Job type">
+            {formatJobTypeLabels(data.jobTypes).length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {formatJobTypeLabels(data.jobTypes).map((t) => (
+                  <span
+                    key={t}
+                    className="inline-flex px-2.5 py-0.5 rounded-full bg-white border border-indigo-100 text-indigo-700 text-xs font-medium shadow-sm"
+                  >
+                    {t}
+                  </span>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </Section>
-
-      {/* Skills */}
-      <Section icon={Wrench} title="Skills" description="Used to match you with relevant jobs">
-        <div className="space-y-4">
-          <TagInput
-            tags={data.skills} placeholder="Add a skill…"
-            inputValue={newSkill} setInputValue={setNewSkill}
-            onAdd={(v) => { addTag("skills", v); setNewSkill("") }}
-            onRemove={(v) => removeTag("skills", v)}
-          />
-          <div>
-            <p className="text-xs text-gray-400 mb-2">Quick add</p>
-            <div className="flex flex-wrap gap-1.5">
-              {POPULAR_SKILLS.filter((s) => !data.skills.includes(s)).slice(0, 16).map((skill) => (
-                <button key={skill} onClick={() => addTag("skills", skill)}
-                  className="px-2.5 py-1 text-xs rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors cursor-pointer">
-                  + {skill}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Section>
-
-      {/* Job Preferences */}
-      <Section icon={Briefcase} title="Job Preferences" description="Roles and locations you're targeting">
-        <div className="space-y-6">
-
-          {/* Titles */}
-          <div className="space-y-3">
-            <p className="text-xs font-semibold text-gray-700">Preferred Job Titles</p>
-            <TagInput
-              tags={data.preferredJobTitles} placeholder="Add a job title…"
-              inputValue={newTitle} setInputValue={setNewTitle}
-              onAdd={(v) => { addTag("preferredJobTitles", v); setNewTitle("") }}
-              onRemove={(v) => removeTag("preferredJobTitles", v)}
-            />
-            <div className="flex flex-wrap gap-1.5">
-              {POPULAR_JOB_TITLES.filter((t) => !data.preferredJobTitles.includes(t)).slice(0, 8).map((title) => (
-                <button key={title} onClick={() => addTag("preferredJobTitles", title)}
-                  className="px-2.5 py-1 text-xs rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors cursor-pointer">
-                  + {title}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Locations */}
-          <div className="space-y-3">
-            <p className="text-xs font-semibold text-gray-700">Preferred Locations</p>
-            <TagInput
-              tags={data.preferredLocations} placeholder="Add a city or country…"
-              inputValue={newLocation} setInputValue={setNewLocation}
-              onAdd={(v) => { addTag("preferredLocations", v); setNewLocation("") }}
-              onRemove={(v) => removeTag("preferredLocations", v)}
-            />
-            <label className="flex items-center gap-2.5 cursor-pointer group">
-              <div
-                onClick={() => setData((p) => ({ ...p, remoteWorkPreferred: !p.remoteWorkPreferred }))}
-                className={`w-9 h-5 rounded-full transition-colors cursor-pointer ${data.remoteWorkPreferred ? 'bg-indigo-600' : 'bg-gray-200'}`}
-              >
-                <div className={`mt-0.5 ml-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${data.remoteWorkPreferred ? 'translate-x-4' : ''}`} />
+                {data.remoteWorkPreferred && (
+                  <span className="inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-medium">
+                    Remote preferred
+                  </span>
+                )}
               </div>
-              <span className="text-xs text-gray-600 group-hover:text-gray-900">I prefer remote work</span>
-            </label>
-          </div>
+            ) : data.remoteWorkPreferred ? (
+              <span className="inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-medium">
+                Remote preferred
+              </span>
+            ) : (
+              <span className="text-gray-400">Not set</span>
+            )}
+          </PreferenceRow>
 
-          {/* Job types */}
-          <div className="space-y-3">
-            <p className="text-xs font-semibold text-gray-700">Job Types</p>
-            <div className="flex flex-wrap gap-2">
-              {JOB_TYPES.map((type) => {
-                const active = data.jobTypes.includes(type.id)
-                return (
-                  <button key={type.id} onClick={() => toggleJobType(type.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
-                      active
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
-                    }`}>
-                    {type.label}
-                  </button>
-                )
-              })}
+          <PreferenceRow label="Job keywords">
+            {data.skills.length > 0 ? (
+              <p className="text-gray-900 leading-relaxed">{data.skills.join(", ")}</p>
+            ) : (
+              <span className="text-gray-400">Not set</span>
+            )}
+          </PreferenceRow>
+
+      
+
+          <PreferenceRow label="Years of experience">
+            <span className="font-medium text-gray-900">{formatExperienceLabel(data.experienceLevel)}</span>
+          </PreferenceRow>
+
+          <PreferenceRow label="Resume uploaded">
+            {data.resumeUploaded ? (
+              <div className="flex items-start gap-2">
+                <FileText className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-emerald-800">Yes</p>
+                  {data.latestResumeFileName && (
+                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-full" title={data.latestResumeFileName}>
+                      {data.latestResumeFileName}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <span className="text-gray-400">Not uploaded yet</span>
+            )}
+          </PreferenceRow>
+
+          <PreferenceRow label="Email format">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-indigo-500 shrink-0" />
+              <span className="font-medium">{formatEmailFormatPreview(data.emailTemplateConfig)}</span>
             </div>
-          </div>
+          </PreferenceRow>
+
+          {data.preferredLocations.length > 0 && (
+            <PreferenceRow label="Locations">
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                <p className="text-gray-900 leading-relaxed">{data.preferredLocations.join(", ")}</p>
+              </div>
+            </PreferenceRow>
+          )}
         </div>
+        <p className="text-xs text-gray-400 mt-4">
+          Update these anytime with <strong>Save Changes</strong> after editing profile fields (when available), or complete onboarding / dashboard preference flows — this panel refreshes on reload.
+        </p>
       </Section>
 
       {/* Account */}
