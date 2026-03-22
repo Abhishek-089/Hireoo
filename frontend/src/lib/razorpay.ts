@@ -3,10 +3,22 @@ import crypto from 'crypto'
 import { prisma } from './prisma'
 import { SUBSCRIPTION_PLANS } from './constants/billing'
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-})
+/** Lazy init so `next build` / route collection does not require Razorpay env on Vercel. */
+let razorpayClient: InstanceType<typeof Razorpay> | null = null
+
+function getRazorpay(): InstanceType<typeof Razorpay> {
+  const key_id = process.env.RAZORPAY_KEY_ID?.trim()
+  const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim()
+  if (!key_id || !key_secret) {
+    throw new Error(
+      'Razorpay is not configured: set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET'
+    )
+  }
+  if (!razorpayClient) {
+    razorpayClient = new Razorpay({ key_id, key_secret })
+  }
+  return razorpayClient
+}
 
 /** Convert a Unix timestamp (seconds) to a JS Date */
 function fromUnix(ts: number): Date {
@@ -38,7 +50,7 @@ export class RazorpayService {
       throw new Error(`Razorpay plan ID not configured for plan: ${planName}`)
     }
 
-    const subscription = await razorpay.subscriptions.create({
+    const subscription = await getRazorpay().subscriptions.create({
       plan_id: razorpayPlanId,
       customer_notify: 1,  // Razorpay sends charge-reminder emails to the customer
       quantity: 1,
@@ -102,7 +114,7 @@ export class RazorpayService {
     // Fetch the subscription from Razorpay to get the exact next charge date
     let periodEnd: Date
     try {
-      const rzpSub = await razorpay.subscriptions.fetch(razorpaySubscriptionId)
+      const rzpSub = await getRazorpay().subscriptions.fetch(razorpaySubscriptionId)
       // charge_at is the Unix timestamp of the next scheduled debit
       periodEnd = rzpSub.charge_at
         ? fromUnix(rzpSub.charge_at as unknown as number)
@@ -167,7 +179,7 @@ export class RazorpayService {
     }
 
     // cancel_at_cycle_end = true → access continues until next billing date
-    await razorpay.subscriptions.cancel(subscription.razorpay_subscription_id, true)
+    await getRazorpay().subscriptions.cancel(subscription.razorpay_subscription_id, true)
 
     await prisma.subscription.update({
       where: { user_id: userId },
