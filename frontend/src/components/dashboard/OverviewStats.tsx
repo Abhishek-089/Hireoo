@@ -1,11 +1,11 @@
-import { Briefcase, Send, Inbox, TrendingUp, ArrowUpRight } from "lucide-react"
+import { Briefcase, Send, Inbox, Star, ArrowUpRight } from "lucide-react"
 import Link from "next/link"
 
 interface DashboardStats {
   jobMatches: number
   emailsSent: number
   repliesReceived: number
-  responseRate: number
+  avgMatchScore: number
 }
 
 const statConfig = [
@@ -13,6 +13,7 @@ const statConfig = [
     key: "jobMatches" as const,
     label: "Job Matches",
     subtext: "Waiting for review",
+    suffix: "",
     icon: Briefcase,
     href: "/dashboard/job-matches",
     gradient: "from-indigo-500/15 to-indigo-600/5",
@@ -25,6 +26,7 @@ const statConfig = [
     key: "emailsSent" as const,
     label: "Emails Sent",
     subtext: "Applications sent",
+    suffix: "",
     icon: Send,
     href: "/dashboard/email-activity",
     gradient: "from-sky-500/15 to-sky-600/5",
@@ -37,6 +39,7 @@ const statConfig = [
     key: "repliesReceived" as const,
     label: "Replies",
     subtext: "Responses received",
+    suffix: "",
     icon: Inbox,
     href: "/dashboard/email-activity",
     gradient: "from-emerald-500/15 to-emerald-600/5",
@@ -46,16 +49,17 @@ const statConfig = [
     border: "border-emerald-100",
   },
   {
-    key: "responseRate" as const,
-    label: "Response Rate",
-    subtext: "Engagement score",
-    icon: TrendingUp,
-    href: "/dashboard/email-activity",
-    gradient: "from-violet-500/15 to-violet-600/5",
-    iconBg: "bg-violet-500/10",
-    iconColor: "text-violet-600",
-    valueColor: "text-violet-700",
-    border: "border-violet-100",
+    key: "avgMatchScore" as const,
+    label: "Avg. Match Score",
+    subtext: "Across all matches",
+    suffix: "%",
+    icon: Star,
+    href: "/dashboard/job-matches",
+    gradient: "from-amber-500/15 to-amber-600/5",
+    iconBg: "bg-amber-500/10",
+    iconColor: "text-amber-600",
+    valueColor: "text-amber-700",
+    border: "border-amber-100",
   },
 ]
 
@@ -64,7 +68,7 @@ export function OverviewStats({ stats }: { stats: DashboardStats }) {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {statConfig.map((cfg) => {
         const raw = stats[cfg.key]
-        const display = cfg.key === "responseRate" ? `${raw}%` : raw
+        const display = `${raw}${cfg.suffix}`
 
         return (
           <Link

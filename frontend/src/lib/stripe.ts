@@ -207,8 +207,8 @@ export class StripeService {
         where: { user_id: userId },
       })
 
-      // If user has active paid subscription, no limits
-      if (subscription?.status === 'active' && subscription.plan_name !== 'free') {
+      // If user has active paid subscription (premium or pro), no limits
+      if (subscription?.status === 'active' && ['premium', 'pro'].includes(subscription.plan_name)) {
         return {
           canUse: true,
           limits: {
@@ -295,10 +295,10 @@ export class StripeService {
 
       // Determine plan name from price ID
       let planName = 'free'
-      if (priceId === process.env.STRIPE_PRICE_PRO_MONTHLY) {
-        planName = 'pro_monthly'
-      } else if (priceId === process.env.STRIPE_PRICE_PRO_YEARLY) {
-        planName = 'pro_yearly'
+      if (priceId === process.env.STRIPE_PRICE_PREMIUM) {
+        planName = 'premium'
+      } else if (priceId === process.env.STRIPE_PRICE_PRO) {
+        planName = 'pro'
       }
 
       // Update subscription

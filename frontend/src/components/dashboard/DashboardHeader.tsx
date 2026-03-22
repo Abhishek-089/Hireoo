@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
 import {
@@ -9,6 +9,7 @@ import {
   LogOut,
   Settings,
   SlidersHorizontal,
+  Star,
 } from "lucide-react"
 import posthog from "posthog-js"
 
@@ -24,10 +25,23 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ user, setSidebarOpen, hasProfile }: DashboardHeaderProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const initials = user.name
     ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : user.email?.charAt(0).toUpperCase() ?? "U"
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    if (userMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [userMenuOpen])
 
   return (
     <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
@@ -53,12 +67,11 @@ export function DashboardHeader({ user, setSidebarOpen, hasProfile }: DashboardH
           )}
 
           {/* User Dropdown */}
-          <div className="relative">
+          <div className="relative" ref={menuRef}>
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               className="flex items-center gap-2.5 pl-1 pr-2.5 py-1 rounded-xl hover:bg-gray-100 transition-colors"
             >
-              {/* Avatar */}
               <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden border border-indigo-200/60 shrink-0">
                 {user.image ? (
                   <img src={user.image} alt={user.name || "User"} className="h-full w-full object-cover" />
@@ -69,53 +82,62 @@ export function DashboardHeader({ user, setSidebarOpen, hasProfile }: DashboardH
               <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[120px] truncate">
                 {user.name || "User"}
               </span>
-              <ChevronDown className="hidden sm:block h-3.5 w-3.5 text-gray-400" />
+              <ChevronDown className={`hidden sm:block h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`} />
             </button>
 
             {userMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
-                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 z-20 overflow-hidden">
-                  {/* User info */}
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden border border-indigo-200/60 shrink-0">
-                        {user.image ? (
-                          <img src={user.image} alt={user.name || "User"} className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="text-xs font-bold text-indigo-600">{initials}</span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{user.name || "User"}</p>
-                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                      </div>
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 z-50 overflow-hidden animate-page-enter">
+                {/* User info */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden border border-indigo-200/60 shrink-0">
+                      {user.image ? (
+                        <img src={user.image} alt={user.name || "User"} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold text-indigo-600">{initials}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{user.name || "User"}</p>
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
                     </div>
                   </div>
-
-                  <div className="py-1 px-1.5">
-                    <Link
-                      href="/dashboard/settings"
-                      className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      <Settings className="h-4 w-4 text-gray-400" />
-                      Settings
-                    </Link>
-                    <button
-                      onClick={() => {
-                        posthog.capture("user_signed_out")
-                        setUserMenuOpen(false)
-                        signOut({ callbackUrl: "/" })
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Sign out
-                    </button>
-                  </div>
                 </div>
-              </>
+
+                <div className="py-1 px-1.5">
+                  <Link
+                    href="/dashboard/settings"
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <Settings className="h-4 w-4 text-gray-400" />
+                    Settings
+                  </Link>
+
+                  <Link
+                    href="/dashboard/billing"
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm font-semibold text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <Star className="h-4 w-4" />
+                    Upgrade Plan
+                  </Link>
+
+                  <div className="my-1 border-t border-gray-100" />
+
+                  <button
+                    onClick={() => {
+                      posthog.capture("user_signed_out")
+                      setUserMenuOpen(false)
+                      signOut({ callbackUrl: "/" })
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

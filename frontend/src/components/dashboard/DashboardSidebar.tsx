@@ -9,6 +9,8 @@ import {
   Mail,
   Settings,
   X,
+  Star,
+  HelpCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import posthog from "posthog-js"
@@ -16,7 +18,7 @@ import posthog from "posthog-js"
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Matched Jobs", href: "/dashboard/job-matches", icon: Briefcase },
-  { name: "Recruiter Replies", href: "/dashboard/email-activity", icon: Mail },
+  { name: "My Applications", href: "/dashboard/email-activity", icon: Mail },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
@@ -78,19 +80,22 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
                   if (!isActive) posthog.capture("dashboard_nav_clicked", { section: item.name })
                 }}
                 className={cn(
-                  "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium",
+                  "transition-all duration-200 ease-out",
                   isActive
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                    ? "bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-100"
+                    : "text-gray-500 hover:text-gray-900 hover:bg-gray-50/80 hover:translate-x-0.5"
                 )}
               >
                 <item.icon className={cn(
-                  "h-[18px] w-[18px] shrink-0 transition-colors",
-                  isActive ? "text-indigo-600" : "text-gray-400 group-hover:text-gray-600"
+                  "h-[18px] w-[18px] shrink-0 transition-all duration-200",
+                  isActive
+                    ? "text-indigo-600 scale-105"
+                    : "text-gray-400 group-hover:text-gray-600"
                 )} />
-                {item.name}
+                <span className="flex-1">{item.name}</span>
                 {isActive && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                 )}
               </Link>
             )
@@ -98,7 +103,25 @@ export function DashboardSidebar({ sidebarOpen, setSidebarOpen }: DashboardSideb
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-gray-100">
+        <div className="px-3 py-4 border-t border-gray-100 space-y-3">
+          {/* Upgrade CTA */}
+          <Link
+            href="/dashboard/billing"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-200"
+          >
+            <Star className="h-4 w-4" />
+            Upgrade Now
+          </Link>
+
+          {/* Help / FAQ */}
+          <Link
+            href="/faq"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 active:scale-95 transition-all"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Help - FAQ
+          </Link>
+
           <p className="text-[10px] text-gray-300 text-center">
             © {new Date().getFullYear()} Hireoo · Built in India 🇮🇳
           </p>

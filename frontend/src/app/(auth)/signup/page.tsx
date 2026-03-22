@@ -2,9 +2,9 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { sendTokenToExtension } from "@/lib/extension-auth"
 import { AlertCircle, CheckCircle2, Loader2, ArrowRight } from "lucide-react"
 import posthog from "posthog-js"
@@ -16,7 +16,19 @@ const steps = [
   { n: "04", title: "Watch the offers roll in", desc: "Sit back and track replies." },
 ]
 
-export default function SignUpPage() {
+/** Safe internal path only — prevents open redirects */
+function buildPostSignupRedirect(next: string | null): string {
+  const fallback = "/dashboard?new=true"
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return fallback
+  if (next.includes("://")) return fallback
+  const sep = next.includes("?") ? "&" : "?"
+  return `${next}${sep}new=true`
+}
+
+function SignUpPageContent() {
+  const searchParams = useSearchParams()
+  const afterSignupUrl = buildPostSignupRedirect(searchParams.get("next"))
+
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -78,7 +90,7 @@ export default function SignUpPage() {
         } catch (error) {
           console.debug("Failed to sync with extension:", error)
         }
-        router.push("/dashboard?new=true")
+        router.push(afterSignupUrl)
       } else {
         router.push("/signin")
       }
@@ -94,7 +106,11 @@ export default function SignUpPage() {
       localStorage.setItem("hireoo_last_signin_provider", "google")
     }
     posthog.capture("user_signed_up", { method: "google" })
-    signIn("google", { callbackUrl: "/dashboard?new=true&syncExtension=true" })
+    const googleCallback =
+      afterSignupUrl.includes("?")
+        ? `${afterSignupUrl}&syncExtension=true`
+        : `${afterSignupUrl}?syncExtension=true`
+    signIn("google", { callbackUrl: googleCallback })
   }
 
   return (
@@ -342,5 +358,19 @@ export default function SignUpPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-white text-gray-500 text-sm">
+          Loading…
+        </div>
+      }
+    >
+      <SignUpPageContent />
+    </Suspense>
   )
 }

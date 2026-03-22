@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { MapPin, Briefcase, ExternalLink, Clock, Building2, ChevronDown, ChevronUp, Loader2, Sparkles, Search, RefreshCw } from "lucide-react"
+import { MapPin, Briefcase, ExternalLink, Clock, Building2, ChevronDown, ChevronUp, Sparkles, Search, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -52,13 +52,58 @@ const EXPERIENCE_LABELS: Record<string, string> = {
   "10+": "Lead/Architect",
 }
 
+// ─── localStorage cache helpers ───────────────────────────────────────────────
+// Persist the last search result per keyword so the user sees their previous
+// results immediately on page load while fresh results are being fetched.
+
+const CACHE_VERSION = "v1"
+
+function cacheKey(keyword: string, experienceLevel: string): string {
+  return `job_search_cache_${CACHE_VERSION}_${keyword}_${experienceLevel}`
+}
+
+function loadCachedResults(keyword: string, experienceLevel: string): SearchResult | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(keyword, experienceLevel))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { result: SearchResult; savedAt: number }
+    // Discard cache entries older than 24 hours
+    if (Date.now() - parsed.savedAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(cacheKey(keyword, experienceLevel))
+      return null
+    }
+    return parsed.result
+  } catch {
+    return null
+  }
+}
+
+function saveCachedResults(keyword: string, experienceLevel: string, result: SearchResult): void {
+  try {
+    localStorage.setItem(
+      cacheKey(keyword, experienceLevel),
+      JSON.stringify({ result, savedAt: Date.now() })
+    )
+  } catch {
+    // localStorage might be full or unavailable — ignore silently
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function JobSearchClient({ preferences }: { preferences: UserPreferences }) {
-  const [results, setResults] = useState<SearchResult | null>(null)
+  const [results, setResults] = useState<SearchResult | null>(() =>
+    // Immediately restore cached results so the page never starts blank
+    loadCachedResults(preferences.jobKeyword, preferences.experienceLevel)
+  )
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [expandedJob, setExpandedJob] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [searchPhase, setSearchPhase] = useState(0)
-  const [showResults, setShowResults] = useState(false)
+  const [showResults, setShowResults] = useState(
+    // If we already have cached data, show it right away without the loading animation
+    () => loadCachedResults(preferences.jobKeyword, preferences.experienceLevel) !== null
+  )
 
   const searchJobs = useCallback(async (offset = 0) => {
     setError(null)
@@ -80,10 +125,13 @@ export function JobSearchClient({ preferences }: { preferences: UserPreferences 
       const data: SearchResult = await response.json()
       if (offset === 0) {
         setResults(data)
+        saveCachedResults(preferences.jobKeyword, preferences.experienceLevel, data)
       } else {
-        setResults((prev) =>
-          prev ? { ...data, jobs: [...prev.jobs, ...data.jobs] } : data
-        )
+        setResults((prev) => {
+          const merged = prev ? { ...data, jobs: [...prev.jobs, ...data.jobs] } : data
+          saveCachedResults(preferences.jobKeyword, preferences.experienceLevel, merged)
+          return merged
+        })
       }
     } catch (err) {
       setError("Failed to load jobs. Please try again.")
@@ -91,17 +139,28 @@ export function JobSearchClient({ preferences }: { preferences: UserPreferences 
     }
   }, [preferences])
 
-  // Auto-search on mount with animated loading
+  // On mount: if we have cached results, show them immediately and silently
+  // refresh in the background. If no cache, show the full loading animation.
   useEffect(() => {
     let phaseTimer: NodeJS.Timeout
     let mounted = true
 
+    const hasCachedData = loadCachedResults(preferences.jobKeyword, preferences.experienceLevel) !== null
+
     const runSearch = async () => {
+      if (hasCachedData) {
+        // Silent background refresh — no loading spinner shown to the user
+        setRefreshing(true)
+        await searchJobs()
+        if (mounted) setRefreshing(false)
+        return
+      }
+
+      // No cache: show full loading animation
       setLoading(true)
       setShowResults(false)
       setSearchPhase(0)
 
-      // Cycle through search phases during loading
       phaseTimer = setInterval(() => {
         if (mounted) {
           setSearchPhase((prev) => Math.min(prev + 1, SEARCH_PHASES.length - 1))
@@ -116,7 +175,6 @@ export function JobSearchClient({ preferences }: { preferences: UserPreferences 
       if (mounted) {
         clearInterval(phaseTimer)
         setLoading(false)
-        // Slight delay before revealing results for a smooth transition
         setTimeout(() => {
           if (mounted) setShowResults(true)
         }, 300)
@@ -129,7 +187,7 @@ export function JobSearchClient({ preferences }: { preferences: UserPreferences 
       mounted = false
       clearInterval(phaseTimer)
     }
-  }, [searchJobs])
+  }, [searchJobs, preferences.jobKeyword, preferences.experienceLevel])
 
   const handleLoadMore = () => {
     if (results) {
@@ -138,20 +196,9 @@ export function JobSearchClient({ preferences }: { preferences: UserPreferences 
   }
 
   const handleRefresh = () => {
-    setLoading(true)
-    setShowResults(false)
-    setSearchPhase(0)
-
-    const phaseTimer = setInterval(() => {
-      setSearchPhase((prev) => Math.min(prev + 1, SEARCH_PHASES.length - 1))
-    }, 800)
-
+    setRefreshing(true)
     searchJobs().then(() => {
-      setTimeout(() => {
-        clearInterval(phaseTimer)
-        setLoading(false)
-        setTimeout(() => setShowResults(true), 300)
-      }, 1500)
+      setRefreshing(false)
     })
   }
 
@@ -248,10 +295,16 @@ export function JobSearchClient({ preferences }: { preferences: UserPreferences 
                 · {results.total} jobs found
               </span>
             )}
+            {refreshing && (
+              <span className="flex items-center gap-1 text-blue-500 text-xs">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                Updating…
+              </span>
+            )}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-2">
-          <RefreshCw className="w-4 h-4" />
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-2">
+          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>

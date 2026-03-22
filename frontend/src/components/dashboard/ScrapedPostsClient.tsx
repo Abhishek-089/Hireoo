@@ -127,6 +127,7 @@ export function ScrapedPostsClient({
   // ── bulk-select & auto-apply state ────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [autoApplyOpen, setAutoApplyOpen] = useState(false)
+  const [autoApplyMinimized, setAutoApplyMinimized] = useState(false)
   const [autoApplyQueue, setAutoApplyQueue] = useState<AutoApplyItem[]>([])
   const [autoApplyRunning, setAutoApplyRunning] = useState(false)
   const [autoApplyDone, setAutoApplyDone] = useState(false)
@@ -965,131 +966,157 @@ export function ScrapedPostsClient({
         </div>
       )}
 
-      {/* ── Auto Apply Progress Modal ─────────────────────────────────────── */}
+      {/* ── Auto Apply Floating Panel ─────────────────────────────────────── */}
       {autoApplyOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="px-5 py-4 border-b flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-green-600" />
-                  Auto Apply
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Sending applications one by one via your Gmail
-                </p>
-              </div>
-              {/* Overall progress */}
-              <div className="text-right">
-                <span className="text-xl font-bold text-gray-800">
-                  {autoApplySentCount}
-                </span>
-                <span className="text-sm text-gray-400"> / {autoApplyTotal}</span>
-                <div className="text-xs text-gray-500">sent</div>
-              </div>
-            </div>
+        <div className={`fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-3rem)] rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden transition-all duration-300 ${autoApplyMinimized ? "w-72" : ""}`}>
 
-            {/* Progress bar */}
-            <div className="h-1.5 bg-gray-100">
-              <div
-                className="h-full bg-green-500 transition-all duration-500"
-                style={{
-                  width: `${autoApplyTotal > 0 ? (autoApplySentCount / autoApplyTotal) * 100 : 0}%`,
-                }}
-              />
-            </div>
-
-            {/* Queue list */}
-            <div className="divide-y max-h-80 overflow-y-auto">
-              {autoApplyQueue.map((item, idx) => {
-                const qParsed = parseLinkedInPost(item.post.text, item.post.emails)
-                const qTitle = qParsed.title || truncate(qParsed.description, 80)
-
-                return (
-                  <div key={item.post.id} className="px-5 py-3 flex items-start gap-3">
-                    <span className="text-xs text-gray-400 w-5 shrink-0 pt-0.5">
-                      {idx + 1}.
-                    </span>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-800 truncate">{qTitle}</p>
-                      {item.post.emails[0] && (
-                        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          {item.post.emails[0]}
-                        </p>
-                      )}
-                      {item.error && (
-                        <p className="text-xs text-red-500 mt-0.5">{item.error}</p>
-                      )}
-                    </div>
-
-                    {/* Status indicator */}
-                    <div className="shrink-0 flex items-center gap-1.5">
-                      {(item.status === "generating" || item.status === "sending") && (
-                        <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
-                      )}
-                      {item.status === "sent" && (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                      )}
-                      <span className={`text-xs font-medium ${STATUS_COLOR[item.status]}`}>
-                        {STATUS_LABEL[item.status]}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Footer */}
-            <div className="px-5 py-4 border-t bg-gray-50 flex items-center justify-between">
-              {autoApplyDone ? (
-                <>
-                  <p className="text-xs text-gray-600">
-                    Done — {autoApplySentCount} sent
-                    {autoApplyFailedCount > 0 && `, ${autoApplyFailedCount} failed`}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAutoApplyOpen(false)
-                      window.location.reload()
-                    }}
-                    className="inline-flex items-center justify-center rounded-md bg-green-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-green-700"
-                  >
-                    Done
-                  </button>
-                </>
-              ) : autoApplyRunning ? (
-                <>
-                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                    Sending… please keep this window open
-                  </p>
-                  <span className="text-xs text-gray-400">Do not close</span>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setAutoApplyOpen(false)}
-                    className="text-xs text-gray-600 hover:text-gray-800"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={runAutoApply}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors cursor-pointer"
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    Start Sending ({autoApplyQueue.length} emails)
-                  </button>
-                </>
+          {/* Header — always visible */}
+          <div className="px-4 py-3 bg-gray-900 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              {autoApplyRunning && !autoApplyDone && (
+                <Loader2 className="h-3.5 w-3.5 text-emerald-400 animate-spin shrink-0" />
               )}
+              {autoApplyDone && (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              )}
+              {!autoApplyRunning && !autoApplyDone && (
+                <Zap className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              )}
+              <span className="text-sm font-semibold text-white truncate">
+                {autoApplyDone
+                  ? `Done · ${autoApplySentCount} sent${autoApplyFailedCount > 0 ? `, ${autoApplyFailedCount} failed` : ""}`
+                  : autoApplyRunning
+                  ? "Auto Apply running…"
+                  : "Auto Apply"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              {/* Progress pill */}
+              <span className="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full">
+                {autoApplySentCount}/{autoApplyTotal}
+              </span>
+
+              {/* Minimize / Maximize */}
+              <button
+                type="button"
+                title={autoApplyMinimized ? "Expand" : "Minimize"}
+                onClick={() => setAutoApplyMinimized(!autoApplyMinimized)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                {autoApplyMinimized
+                  ? <ChevronUp className="h-4 w-4" />
+                  : <ChevronDown className="h-4 w-4" />}
+              </button>
             </div>
           </div>
+
+          {/* Collapsed: just a thin progress bar */}
+          {autoApplyMinimized ? (
+            <div className="h-1 bg-gray-200">
+              <div
+                className="h-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${autoApplyTotal > 0 ? (autoApplySentCount / autoApplyTotal) * 100 : 0}%` }}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Progress bar */}
+              <div className="h-1 bg-gray-100">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-500"
+                  style={{ width: `${autoApplyTotal > 0 ? (autoApplySentCount / autoApplyTotal) * 100 : 0}%` }}
+                />
+              </div>
+
+              {/* Queue list */}
+              <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
+                {autoApplyQueue.map((item, idx) => {
+                  const qParsed = parseLinkedInPost(item.post.text, item.post.emails)
+                  const qTitle = qParsed.title || truncate(qParsed.description, 60)
+
+                  return (
+                    <div key={item.post.id} className="px-4 py-3 flex items-start gap-3">
+                      <span className="text-xs text-gray-300 w-4 shrink-0 pt-0.5">{idx + 1}.</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-800 truncate">{qTitle}</p>
+                        {item.post.emails[0] && (
+                          <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1 truncate">
+                            <Mail className="h-3 w-3 shrink-0" />
+                            {item.post.emails[0]}
+                          </p>
+                        )}
+                        {item.error && (
+                          <p className="text-[11px] text-red-500 mt-0.5">{item.error}</p>
+                        )}
+                      </div>
+                      <div className="shrink-0 flex items-center gap-1.5">
+                        {(item.status === "generating" || item.status === "sending") && (
+                          <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+                        )}
+                        {item.status === "sent" && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        )}
+                        <span className={`text-[11px] font-medium ${STATUS_COLOR[item.status]}`}>
+                          {STATUS_LABEL[item.status]}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Footer */}
+              <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+                {autoApplyDone ? (
+                  <>
+                    <p className="text-xs text-gray-500">
+                      {autoApplySentCount} sent{autoApplyFailedCount > 0 && `, ${autoApplyFailedCount} failed`}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setAutoApplyOpen(false); window.location.reload() }}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Done
+                    </button>
+                  </>
+                ) : autoApplyRunning ? (
+                  <>
+                    <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                      Running in background — you can browse freely
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAutoApplyMinimized(true)}
+                      className="text-[11px] text-gray-400 hover:text-gray-600 underline cursor-pointer whitespace-nowrap"
+                    >
+                      Minimize
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setAutoApplyOpen(false)}
+                      className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={runAutoApply}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors cursor-pointer"
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      Start Sending ({autoApplyQueue.length})
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

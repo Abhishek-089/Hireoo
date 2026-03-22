@@ -38,7 +38,7 @@ export default function EmailActivityPage() {
       {/* Page header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Recruiter Replies</h1>
+          <h1 className="text-2xl font-bold text-gray-900">My Applications</h1>
           <p className="text-sm text-gray-500 mt-1">
             Track your applications and conversations with recruiters.
           </p>

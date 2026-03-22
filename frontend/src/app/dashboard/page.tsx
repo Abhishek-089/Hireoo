@@ -1,5 +1,6 @@
 import { OverviewStats } from "@/components/dashboard/OverviewStats"
 import { RecentActivity } from "@/components/dashboard/RecentActivity"
+import { JobMatchesPreview } from "@/components/dashboard/JobMatchesPreview"
 import { QuickActions } from "@/components/dashboard/QuickActions"
 import { ExtensionAutoLogin } from "@/components/extension/ExtensionAutoLogin"
 import { DailyLimitProgress } from "@/components/dashboard/DailyLimitProgress"
@@ -19,7 +20,8 @@ async function getDashboardStats(userId: string) {
     const [
       matchesCount,
       applicationsCount,
-      emailStats
+      repliesCount,
+      avgScoreResult,
     ] = await Promise.all([
       prisma.scrapedPostMatch.count({
         where: {
@@ -46,18 +48,25 @@ async function getDashboardStats(userId: string) {
           where: { user_id: userId, thread_id: { in: threadIds }, direction: 'received', is_reply: true },
         })
         return replies.length
-      })
+      }),
+      prisma.scrapedPostMatch.aggregate({
+        where: {
+          user_id: userId,
+          shown_to_user: true,
+          scrapedPost: { text: { contains: '@' } },
+        },
+        _avg: { match_score: true },
+      }),
     ])
 
-    const repliesCount = emailStats
-    const responseRate = applicationsCount > 0
-      ? Math.round((repliesCount / applicationsCount) * 100)
+    const avgMatchScore = avgScoreResult._avg.match_score
+      ? Math.round(avgScoreResult._avg.match_score)
       : 0
 
-    return { jobMatches: matchesCount, emailsSent: applicationsCount, repliesReceived: repliesCount, responseRate }
+    return { jobMatches: matchesCount, emailsSent: applicationsCount, repliesReceived: repliesCount, avgMatchScore }
   } catch (error) {
     console.error("Error fetching dashboard stats:", error)
-    return { jobMatches: 0, emailsSent: 0, repliesReceived: 0, responseRate: 0 }
+    return { jobMatches: 0, emailsSent: 0, repliesReceived: 0, avgMatchScore: 0 }
   }
 }
 
@@ -74,7 +83,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const stats = userId
     ? await getDashboardStats(userId)
-    : { jobMatches: 0, emailsSent: 0, repliesReceived: 0, responseRate: 0 }
+    : { jobMatches: 0, emailsSent: 0, repliesReceived: 0, avgMatchScore: 0 }
 
   const awaitedSearchParams = await searchParams
   const newParamStr = Array.isArray(awaitedSearchParams?.new) ? awaitedSearchParams.new[0] : awaitedSearchParams?.new
@@ -175,8 +184,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         {/* Setup checklist (hidden once complete) */}
         <QuickActions status={userStatus} />
 
-        {/* Recent activity */}
-        <RecentActivity />
+        {/* Recent activity + matched jobs side by side */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <RecentActivity />
+          <JobMatchesPreview />
+        </div>
 
       </div>
     </>

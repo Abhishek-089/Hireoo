@@ -1,12 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { CheckCircle, CreditCard, Zap, Crown, ExternalLink } from 'lucide-react'
+import {
+  CreditCard, Zap, Crown, CheckCircle, ExternalLink,
+  Loader2, AlertCircle, RefreshCw, Star, Shield, Clock, Gem,
+} from 'lucide-react'
 import { SUBSCRIPTION_PLANS } from '@/lib/constants/billing'
 
 interface SubscriptionData {
@@ -29,49 +27,164 @@ interface SubscriptionData {
   }
 }
 
+interface DailyLimitData {
+  current: number
+  limit: number
+  percentageUsed: number
+  canScrape: boolean
+  hoursUntilReset: number
+  tier: string
+}
+
+function UsageBar({ label, current, max }: { label: string; current: number; max: number }) {
+  const unlimited = max === -1
+  const pct = unlimited ? 0 : Math.min(Math.round((current / max) * 100), 100)
+  const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-indigo-500'
+  return (
+    <div>
+      <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+        <span className="font-medium text-gray-700">{label}</span>
+        <span>{current} / {unlimited ? '∞' : max}</span>
+      </div>
+      <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+        {unlimited ? (
+          <div className="h-full w-full rounded-full bg-emerald-400 opacity-40" />
+        ) : (
+          <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+const PLANS = [
+  {
+    key: 'free' as const,
+    name: 'Free',
+    tagline: 'Get started — no card needed.',
+    price: '₹0',
+    period: 'forever',
+    sub: null,
+    icon: Zap,
+    iconColor: 'text-gray-500',
+    accent: 'border-gray-200',
+    highlight: false,
+    badge: null,
+    badgeStyle: '',
+    features: [
+      '10 matched jobs per day',
+      'One-click apply via Gmail',
+      'Recruiter contact lookup',
+      'Basic profile matching',
+      'Community support',
+    ],
+  },
+  {
+    key: 'premium' as const,
+    name: 'Premium',
+    tagline: 'For active job seekers.',
+    price: '₹149',
+    period: '/mo',
+    sub: null,
+    icon: Crown,
+    iconColor: 'text-white',
+    accent: 'border-indigo-500',
+    highlight: true,
+    badge: 'Most popular',
+    badgeStyle: 'bg-white text-indigo-600',
+    features: [
+      '25 matched jobs per day',
+      'Advanced AI matching',
+      'Custom email templates',
+      'Bulk auto-apply (10 at once)',
+      'Reply & thread tracking',
+      'Priority support',
+      'Resume tips',
+    ],
+  },
+  {
+    key: 'pro' as const,
+    name: 'Pro',
+    tagline: 'For power users going all-in.',
+    price: '₹249',
+    period: '/mo',
+    sub: null,
+    icon: Gem,
+    iconColor: 'text-gray-700',
+    accent: 'border-gray-200',
+    highlight: false,
+    badge: null,
+    badgeStyle: '',
+    features: [
+      '50 matched jobs per day',
+      'Everything in Premium',
+      'Unlimited bulk apply',
+      'Advanced analytics',
+      'API access',
+      'Dedicated support',
+    ],
+  },
+]
+
+const FAQ = [
+  {
+    q: "Can I cancel anytime?",
+    a: "Yes, you can cancel at any time. You'll continue to have access until the end of your billing period.",
+  },
+  {
+    q: "What happens to my data if I cancel?",
+    a: "Your data remains safe. Reactivate anytime to regain full access.",
+  },
+  {
+    q: "Do you offer refunds?",
+    a: "We offer a 30-day money-back guarantee for all new subscriptions.",
+  },
+  {
+    q: "What's the difference between Premium and Pro?",
+    a: "Premium is great for active job seekers with 25 matches/day and bulk apply. Pro gives you 50 matches/day, unlimited bulk apply, advanced analytics, and dedicated support.",
+  },
+]
+
 export default function BillingPage() {
-  const { data: session } = useSession()
-  const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null)
+  const [data, setData] = useState<SubscriptionData | null>(null)
+  const [dailyLimit, setDailyLimit] = useState<DailyLimitData | null>(null)
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [openFaq, setOpenFaq] = useState<number | null>(null)
 
-  useEffect(() => {
-    fetchSubscriptionData()
-  }, [])
+  useEffect(() => { fetchData() }, [])
 
-  const fetchSubscriptionData = async () => {
+  const fetchData = async () => {
+    setLoading(true)
     try {
-      const response = await fetch('/api/billing/subscription')
-      if (response.ok) {
-        const data = await response.json()
-        setSubscriptionData(data)
+      const [subRes, limitRes] = await Promise.all([
+        fetch('/api/billing/subscription'),
+        fetch('/api/scraping/daily-limit'),
+      ])
+      if (subRes.ok) setData(await subRes.json())
+      if (limitRes.ok) {
+        const limitJson = await limitRes.json()
+        setDailyLimit(limitJson.data)
       }
-    } catch (error) {
-      console.error('Error fetching subscription data:', error)
-    } finally {
+    } catch { /* silently fail */ } finally {
       setLoading(false)
     }
   }
 
-  const handleUpgrade = async (planName: string) => {
-    setCheckoutLoading(planName)
+  const handleUpgrade = async (planKey: string) => {
+    setCheckoutLoading(planKey)
     try {
-      const response = await fetch('/api/billing/checkout', {
+      const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planName })
+        body: JSON.stringify({ planName: planKey }),
       })
-
-      if (response.ok) {
-        const { checkoutUrl } = await response.json()
+      if (res.ok) {
+        const { checkoutUrl } = await res.json()
         window.location.href = checkoutUrl
-      } else {
-        console.error('Failed to create checkout session')
       }
-    } catch (error) {
-      console.error('Error creating checkout:', error)
-    } finally {
+    } catch { /* silently fail */ } finally {
       setCheckoutLoading(null)
     }
   }
@@ -79,266 +192,264 @@ export default function BillingPage() {
   const handleManageSubscription = async () => {
     setPortalLoading(true)
     try {
-      const response = await fetch('/api/billing/portal', {
-        method: 'POST',
-      })
-
-      if (response.ok) {
-        const { portalUrl } = await response.json()
+      const res = await fetch('/api/billing/portal', { method: 'POST' })
+      if (res.ok) {
+        const { portalUrl } = await res.json()
         window.location.href = portalUrl
-      } else {
-        console.error('Failed to create portal session')
       }
-    } catch (error) {
-      console.error('Error creating portal:', error)
-    } finally {
+    } catch { /* silently fail */ } finally {
       setPortalLoading(false)
     }
   }
 
+  const currentPlan = data?.subscription.planName || 'free'
+  const isPaid = ['premium', 'pro'].includes(currentPlan)
+  const periodEnd = data?.subscription.currentPeriodEnd
+    ? new Date(data.subscription.currentPeriodEnd).toLocaleDateString('en-IN', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null
+
+  const planDisplayName = PLANS.find(p => p.key === currentPlan)?.name ?? currentPlan
+
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-64 bg-gray-200 rounded"></div>
-            ))}
-          </div>
+      <div className="space-y-6 animate-page-enter">
+        <div className="space-y-2">
+          <div className="skeleton h-8 w-56 rounded-xl" />
+          <div className="skeleton h-4 w-72 rounded-lg" />
+        </div>
+        <div className="skeleton h-36 w-full rounded-2xl" />
+        <div className="grid gap-5 md:grid-cols-3">
+          {[0, 1, 2].map(i => <div key={i} className="skeleton h-96 rounded-2xl" />)}
         </div>
       </div>
     )
   }
 
-  const currentPlan = subscriptionData?.subscription.planName || 'free'
-  const isPaidPlan = ['pro_monthly', 'pro_yearly'].includes(currentPlan)
-
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Billing & Subscription</h1>
-        <p className="text-gray-600 mt-2">Manage your subscription and billing information</p>
+    <div className="space-y-8 animate-page-enter max-w-5xl">
+
+      {/* Header */}
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Billing & Subscription</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage your plan and usage</p>
+        </div>
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </button>
       </div>
 
-      {/* Current Plan Status */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5" />
-            Current Plan
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-xl font-semibold">
-                {SUBSCRIPTION_PLANS[currentPlan.toUpperCase() as keyof typeof SUBSCRIPTION_PLANS]?.displayName || 'Free'}
-              </h3>
-              <Badge variant={subscriptionData?.subscription.status === 'active' ? 'default' : 'secondary'}>
-                {subscriptionData?.subscription.status}
-              </Badge>
+      {/* Current Plan Card */}
+      <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <CreditCard className="h-4 w-4 text-gray-400" />
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Current Plan</h2>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-2xl font-bold text-gray-900">{planDisplayName}</span>
+              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                data?.subscription.status === 'active'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-gray-100 text-gray-500'
+              }`}>
+                {data?.subscription.status ?? 'active'}
+              </span>
             </div>
-            {isPaidPlan && (
-              <Button
-                onClick={handleManageSubscription}
-                disabled={portalLoading}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <ExternalLink className="h-4 w-4" />
-                {portalLoading ? 'Loading...' : 'Manage Subscription'}
-              </Button>
+
+            {periodEnd && (
+              <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
+                <Clock className="h-3.5 w-3.5" />
+                {data?.subscription.cancelAtPeriodEnd ? `Expires on ${periodEnd}` : `Renews on ${periodEnd}`}
+              </p>
+            )}
+
+            {data?.subscription.cancelAtPeriodEnd && (
+              <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 text-xs text-amber-700">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Your plan is set to cancel at the end of this billing period.
+              </div>
             )}
           </div>
 
-          {/* Usage Limits for Free Plan */}
-          {currentPlan === 'free' && subscriptionData?.usage && (
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Job Matches</span>
-                  <span>{subscriptionData.usage.limits.currentJobMatches}/{subscriptionData.usage.limits.monthlyJobMatches}</span>
-                </div>
-                <Progress
-                  value={(subscriptionData.usage.limits.currentJobMatches / subscriptionData.usage.limits.monthlyJobMatches) * 100}
-                  className="h-2"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Emails</span>
-                  <span>{subscriptionData.usage.limits.currentEmails}/{subscriptionData.usage.limits.monthlyEmails}</span>
-                </div>
-                <Progress
-                  value={(subscriptionData.usage.limits.currentEmails / subscriptionData.usage.limits.monthlyEmails) * 100}
-                  className="h-2"
-                />
-              </div>
-              {!subscriptionData.usage.canUse && (
-                <p className="text-sm text-red-600">
-                  You've reached your monthly limits. Upgrade to Pro for unlimited access!
-                </p>
-              )}
-            </div>
+          {isPaid && (
+            <button
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors shrink-0"
+            >
+              {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+              Manage Subscription
+            </button>
           )}
+        </div>
 
-          {/* Subscription Period */}
-          {subscriptionData?.subscription.currentPeriodEnd && (
-            <p className="text-sm text-gray-600 mt-4">
-              {subscriptionData.subscription.cancelAtPeriodEnd
-                ? `Expires on ${new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}`
-                : `Renews on ${new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}`
-              }
-            </p>
-          )}
-        </CardContent>
-      </Card>
+        {/* Daily job matches usage */}
+        {dailyLimit && (
+          <div className="mt-6 pt-5 border-t border-gray-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Job Matches Today</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Resets in {dailyLimit.hoursUntilReset}h · {dailyLimit.tier} plan
+                </p>
+              </div>
+              <span className={`text-sm font-bold tabular-nums ${
+                dailyLimit.percentageUsed >= 90 ? 'text-red-600' :
+                dailyLimit.percentageUsed >= 70 ? 'text-amber-600' : 'text-indigo-600'
+              }`}>
+                {dailyLimit.current} / {dailyLimit.limit}
+              </span>
+            </div>
+            <UsageBar
+              label=""
+              current={dailyLimit.current}
+              max={dailyLimit.limit}
+            />
+            {!dailyLimit.canScrape && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Daily limit reached. Resets in {dailyLimit.hoursUntilReset}h — or upgrade for more matches.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Pricing Plans */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Free Plan */}
-        <Card className={currentPlan === 'free' ? 'ring-2 ring-blue-500' : ''}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5" />
-              Free
-            </CardTitle>
-            <CardDescription>Perfect for getting started</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold mb-4">$0<span className="text-lg font-normal">/month</span></div>
-            <ul className="space-y-2 mb-6">
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">10 job matches per month</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">5 emails per month</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">Basic job matching</span>
-              </li>
-            </ul>
-            {currentPlan === 'free' && (
-              <Badge variant="secondary">Current Plan</Badge>
-            )}
-          </CardContent>
-        </Card>
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 mb-4">Available Plans</h2>
+        <div className="grid gap-5 md:grid-cols-3">
+          {PLANS.map((plan) => {
+            const isActive = currentPlan === plan.key
+            const canUpgrade = !isActive && plan.key !== 'free'
+            // downgrade: active is pro and this is premium, or active is premium/pro and this is free
+            const isDowngrade = !isActive && plan.key === 'free' && isPaid
 
-        {/* Pro Monthly */}
-        <Card className={currentPlan === 'pro_monthly' ? 'ring-2 ring-blue-500' : ''}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Crown className="h-5 w-5" />
-              Pro Monthly
-            </CardTitle>
-            <CardDescription>Full access to all features</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold mb-4">$29<span className="text-lg font-normal">/month</span></div>
-            <ul className="space-y-2 mb-6">
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">Unlimited job matches</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">100 emails per month</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">AI email generation</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">Advanced analytics</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">Priority support</span>
-              </li>
-            </ul>
-            {currentPlan === 'pro_monthly' ? (
-              <Badge variant="secondary">Current Plan</Badge>
-            ) : (
-              <Button
-                onClick={() => handleUpgrade('pro_monthly')}
-                disabled={checkoutLoading === 'pro_monthly'}
-                className="w-full"
+            return (
+              <div
+                key={plan.key}
+                className={`relative rounded-2xl border-2 flex flex-col overflow-hidden transition-all ${
+                  plan.highlight
+                    ? 'border-indigo-500 shadow-xl shadow-indigo-100'
+                    : isActive
+                    ? 'border-indigo-300 ring-1 ring-indigo-200'
+                    : 'border-gray-200'
+                }`}
               >
-                {checkoutLoading === 'pro_monthly' ? 'Loading...' : 'Upgrade to Pro'}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+                {/* Highlighted card gets indigo header */}
+                <div className={`px-6 pt-6 pb-5 ${plan.highlight ? 'bg-indigo-600' : 'bg-white'}`}>
+                  {plan.badge && (
+                    <span className={`inline-block text-[11px] font-bold px-2.5 py-1 rounded-full mb-3 ${plan.badgeStyle}`}>
+                      {plan.badge}
+                    </span>
+                  )}
 
-        {/* Pro Yearly */}
-        <Card className={currentPlan === 'pro_yearly' ? 'ring-2 ring-blue-500' : ''}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Crown className="h-5 w-5" />
-              Pro Yearly
-              <Badge variant="outline" className="ml-auto">Save 17%</Badge>
-            </CardTitle>
-            <CardDescription>Best value for serious job seekers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold mb-4">$290<span className="text-lg font-normal">/year</span></div>
-            <div className="text-sm text-gray-600 mb-4">~$24/month</div>
-            <ul className="space-y-2 mb-6">
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">All Pro Monthly features</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">17% savings</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">Priority feature requests</span>
-              </li>
-            </ul>
-            {currentPlan === 'pro_yearly' ? (
-              <Badge variant="secondary">Current Plan</Badge>
-            ) : (
-              <Button
-                onClick={() => handleUpgrade('pro_yearly')}
-                disabled={checkoutLoading === 'pro_yearly'}
-                className="w-full"
-              >
-                {checkoutLoading === 'pro_yearly' ? 'Loading...' : 'Upgrade to Pro Yearly'}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+                  <p className={`text-[10px] font-semibold uppercase tracking-widest mb-1 ${plan.highlight ? 'text-indigo-200' : 'text-gray-400'}`}>
+                    {plan.name}
+                  </p>
+
+                  <div className="flex items-end gap-1 mb-1">
+                    <span className={`text-4xl font-extrabold ${plan.highlight ? 'text-white' : 'text-gray-900'}`}>
+                      {plan.price}
+                    </span>
+                    <span className={`text-sm mb-1.5 ${plan.highlight ? 'text-indigo-200' : 'text-gray-400'}`}>
+                      {plan.period}
+                    </span>
+                  </div>
+
+                  <p className={`text-sm ${plan.highlight ? 'text-indigo-200' : 'text-gray-500'}`}>
+                    {plan.tagline}
+                  </p>
+                </div>
+
+                {/* Features */}
+                <div className="px-6 py-5 flex-1 bg-white">
+                  <ul className="space-y-3">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2.5 text-sm text-gray-600">
+                        <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* CTA */}
+                <div className="px-6 pb-6 bg-white">
+                  {isActive ? (
+                    <div className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border-2 border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-semibold">
+                      <Shield className="h-4 w-4" />
+                      Current Plan
+                    </div>
+                  ) : canUpgrade ? (
+                    <button
+                      onClick={() => handleUpgrade(plan.key)}
+                      disabled={!!checkoutLoading}
+                      className={`w-full py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-60 flex items-center justify-center gap-2 ${
+                        plan.highlight
+                          ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
+                          : 'bg-gray-900 text-white hover:bg-gray-800'
+                      }`}
+                    >
+                      {checkoutLoading === plan.key ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Processing...</>
+                      ) : (
+                        <>
+                          <Star className="h-4 w-4" />
+                          Start {plan.name} →
+                        </>
+                      )}
+                    </button>
+                  ) : isDowngrade ? (
+                    <button
+                      onClick={handleManageSubscription}
+                      disabled={portalLoading}
+                      className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                      {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Manage Plan
+                    </button>
+                  ) : (
+                    <div className="py-2.5 text-center text-sm text-gray-400">Free forever</div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
-      {/* FAQ Section */}
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Frequently Asked Questions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <h4 className="font-semibold mb-2">Can I cancel anytime?</h4>
-            <p className="text-sm text-gray-600">Yes, you can cancel your subscription at any time. You'll continue to have access until the end of your billing period.</p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-2">What happens to my data if I cancel?</h4>
-            <p className="text-sm text-gray-600">Your data remains safe. You can reactivate your subscription anytime to regain full access.</p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-2">Do you offer refunds?</h4>
-            <p className="text-sm text-gray-600">We offer a 30-day money-back guarantee for all new subscriptions.</p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* FAQ */}
+      <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">Frequently Asked Questions</h2>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {FAQ.map((item, i) => (
+            <button
+              key={i}
+              onClick={() => setOpenFaq(openFaq === i ? null : i)}
+              className="w-full text-left px-6 py-4 hover:bg-gray-50/60 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-semibold text-gray-900">{item.q}</p>
+                <span className={`text-gray-400 text-lg leading-none shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-45' : ''}`}>+</span>
+              </div>
+              {openFaq === i && (
+                <p className="text-sm text-gray-500 mt-2 pr-6">{item.a}</p>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
     </div>
   )
 }
-
-

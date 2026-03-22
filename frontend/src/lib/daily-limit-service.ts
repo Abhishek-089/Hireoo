@@ -37,13 +37,13 @@ export class DailyLimitService {
 
             // Map subscription plans to daily limits
             switch (subscription.plan_name) {
-                case 'premium_basic': // ₹149/month
+                case 'premium':       // ₹149/month
+                case 'premium_basic': // legacy
+                case 'pro_monthly':   // legacy
                     return 25
-                case 'premium_pro': // ₹249/month
-                    return 50
-                case 'pro_monthly': // Legacy mapping
-                    return 25
-                case 'pro_yearly': // Legacy mapping
+                case 'pro':           // ₹249/month
+                case 'premium_pro':   // legacy
+                case 'pro_yearly':    // legacy
                     return 50
                 default:
                     return 10 // Free tier

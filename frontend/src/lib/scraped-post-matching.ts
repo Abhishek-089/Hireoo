@@ -18,6 +18,16 @@ export class ScrapedPostMatchingService {
     userId: string
   ): Promise<ScrapedPostMatchResult | null> {
     try {
+      // Check if this post is already shown to the user.
+      // Already-shown posts (from previous days) must NOT be hidden when today's
+      // daily limit is reached — the limit only controls how many NEW posts get
+      // shown each day.
+      const existingMatch = await prisma.scrapedPostMatch.findUnique({
+        where: { user_id_scraped_post_id: { user_id: userId, scraped_post_id: scrapedPostId } },
+        select: { shown_to_user: true, shown_at: true },
+      })
+      const alreadyShown = existingMatch?.shown_to_user === true
+
       // Get scraped post and user data
       const [post, user] = await Promise.all([
         prisma.scrapedPost.findUnique({
@@ -99,10 +109,12 @@ export class ScrapedPostMatchingService {
       // HARD FILTER 1: post must contain at least one email address
       if (emails.length === 0) {
         console.log(`[Matching] Skipping post ${scrapedPostId} — no email found`)
-        await prisma.scrapedPostMatch.updateMany({
-          where: { user_id: userId, scraped_post_id: scrapedPostId },
-          data: { shown_to_user: false, shown_at: null },
-        })
+        if (!alreadyShown) {
+          await prisma.scrapedPostMatch.updateMany({
+            where: { user_id: userId, scraped_post_id: scrapedPostId },
+            data: { shown_to_user: false, shown_at: null },
+          })
+        }
         return null
       }
 
@@ -125,25 +137,31 @@ export class ScrapedPostMatchingService {
       // HARD FILTER 2: post must score above the minimum threshold
       if (matchScore < 20) {
         console.log(`[Matching] Skipping post ${scrapedPostId} — score ${matchScore} below threshold`)
-        await prisma.scrapedPostMatch.updateMany({
-          where: { user_id: userId, scraped_post_id: scrapedPostId },
-          data: { shown_to_user: false, shown_at: null },
-        })
+        if (!alreadyShown) {
+          await prisma.scrapedPostMatch.updateMany({
+            where: { user_id: userId, scraped_post_id: scrapedPostId },
+            data: { shown_to_user: false, shown_at: null },
+          })
+        }
         return null
       }
 
-      // HARD FILTER 3: user must not have hit their daily limit
-      const limitCheck = await DailyLimitService.checkDailyLimit(userId)
-      if (!limitCheck.canScrape) {
-        console.log(`[Matching] Skipping post ${scrapedPostId} — daily limit reached for user ${userId}: ${limitCheck.reason}`)
-        await prisma.scrapedPostMatch.updateMany({
-          where: { user_id: userId, scraped_post_id: scrapedPostId },
-          data: { shown_to_user: false, shown_at: null },
-        })
-        return null
+      // HARD FILTER 3: user must not have hit their daily limit.
+      // Already-shown posts from previous days are exempt — the daily limit only
+      // controls how many NEW posts get revealed each day, not whether old posts
+      // remain visible.
+      if (!alreadyShown) {
+        const limitCheck = await DailyLimitService.checkDailyLimit(userId)
+        if (!limitCheck.canScrape) {
+          console.log(`[Matching] Skipping post ${scrapedPostId} — daily limit reached for user ${userId}: ${limitCheck.reason}`)
+          // The stub was created with shown_to_user: false, so nothing to undo.
+          return null
+        }
       }
 
-      // Post passed all filters — mark it as visible
+      // Post passed all filters — mark it as visible.
+      // For already-shown posts (being re-matched to refresh scores), preserve the
+      // original shown_at so the daily-window count stays accurate.
       const now = new Date()
       const dailyLimit = await DailyLimitService.getDailyJobLimit(userId)
 
@@ -158,7 +176,9 @@ export class ScrapedPostMatchingService {
           match_score: matchScore,
           match_quality: matchQuality,
           shown_to_user: true,
-          shown_at: now,
+          // Only stamp shown_at the first time a post is revealed; subsequent
+          // score-refresh runs must not move the timestamp into today's window.
+          ...(alreadyShown ? {} : { shown_at: now }),
         },
         create: {
           user_id: userId,
@@ -173,36 +193,38 @@ export class ScrapedPostMatchingService {
       })
 
       // Post-write verification: recount immediately after the upsert.
-      // If two concurrent batches both passed checkDailyLimit at the same time
-      // (race condition), the second one will see count > limit here and undo itself.
-      const userForWindow = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { daily_limit_reset_at: true }
-      })
-      const windowStart = DailyLimitService.getDailyWindowStart(
-        (userForWindow as any)?.daily_limit_reset_at ?? null
-      )
-      const countAfterWrite = await prisma.scrapedPostMatch.count({
-        where: {
-          user_id: userId,
-          shown_to_user: true,
-          shown_at: { gte: windowStart },
-          scrapedPost: { text: { contains: '@' } }
-        }
-      })
-
-      if (countAfterWrite > dailyLimit) {
-        // We're over the limit — undo this post (it was the one that tipped us over)
-        await prisma.scrapedPostMatch.update({
-          where: { id: match.id },
-          data: { shown_to_user: false, shown_at: null }
+      // Only needed for newly-shown posts — already-shown posts didn't consume a
+      // new slot and their shown_at wasn't changed.
+      if (!alreadyShown) {
+        const userForWindow = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { daily_limit_reset_at: true }
         })
-        console.log(`[Matching] Post ${scrapedPostId} undone — count ${countAfterWrite} exceeded limit ${dailyLimit}`)
-        return null
-      }
+        const windowStart = DailyLimitService.getDailyWindowStart(
+          (userForWindow as any)?.daily_limit_reset_at ?? null
+        )
+        const countAfterWrite = await prisma.scrapedPostMatch.count({
+          where: {
+            user_id: userId,
+            shown_to_user: true,
+            shown_at: { gte: windowStart },
+            scrapedPost: { text: { contains: '@' } }
+          }
+        })
 
-      // Increment the DB counter to keep it in sync
-      await DailyLimitService.incrementDailyCount(userId)
+        if (countAfterWrite > dailyLimit) {
+          // We're over the limit — undo this post (it was the one that tipped us over)
+          await prisma.scrapedPostMatch.update({
+            where: { id: match.id },
+            data: { shown_to_user: false, shown_at: null }
+          })
+          console.log(`[Matching] Post ${scrapedPostId} undone — count ${countAfterWrite} exceeded limit ${dailyLimit}`)
+          return null
+        }
+
+        // Increment the DB counter to keep it in sync (only for new shows)
+        await DailyLimitService.incrementDailyCount(userId)
+      }
 
       // Trigger AI Enrichment immediately
       await this.enrichMatchWithAI(match, post.text, post.post_url || "")

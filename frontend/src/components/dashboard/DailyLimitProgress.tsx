@@ -92,15 +92,6 @@ export function DailyLimitProgress() {
         </div>
       </div>
 
-      {/* Upgrade CTA */}
-      {limitReached && isFreeUser && (
-        <Link
-          href="/dashboard/billing"
-          className="shrink-0 text-xs font-semibold px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors whitespace-nowrap"
-        >
-          Upgrade
-        </Link>
-      )}
     </div>
   )
 }

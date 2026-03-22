@@ -17,9 +17,9 @@ export async function POST(request: NextRequest) {
 
     const { planName } = await request.json()
 
-    if (!planName || !['pro_monthly', 'pro_yearly'].includes(planName)) {
+    if (!planName || !['premium', 'pro'].includes(planName)) {
       return NextResponse.json(
-        { error: "Invalid plan name. Must be 'pro_monthly' or 'pro_yearly'" },
+        { error: "Invalid plan name. Must be 'premium' or 'pro'" },
         { status: 400 }
       )
     }
