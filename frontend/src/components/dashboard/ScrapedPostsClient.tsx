@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
-import { signIn } from "next-auth/react"
 import { Mail, ExternalLink, Star, CheckCircle2, MessageSquare, Zap, Loader2, MapPin, Briefcase, Clock, ChevronDown, ChevronUp } from "lucide-react"
 import { parseLinkedInPost, type ParsedPost } from "@/lib/post-parser"
 import posthog from "posthog-js"
@@ -131,6 +131,19 @@ export function ScrapedPostsClient({
   const [autoApplyQueue, setAutoApplyQueue] = useState<AutoApplyItem[]>([])
   const [autoApplyRunning, setAutoApplyRunning] = useState(false)
   const [autoApplyDone, setAutoApplyDone] = useState(false)
+
+  // ── lock the dashboard <main> scroll when any modal is open ──────────────
+  const anyModalOpen = modalOpen || resumeModalOpen || gmailModalOpen || (autoApplyOpen && !autoApplyMinimized)
+  useEffect(() => {
+    const main = document.querySelector<HTMLElement>("main")
+    if (!main) return
+    if (anyModalOpen) {
+      main.style.overflow = "hidden"
+    } else {
+      main.style.overflow = ""
+    }
+    return () => { main.style.overflow = "" }
+  }, [anyModalOpen])
 
   const { currentPage, totalPages, showingFrom, showingTo, totalCount } = pagination
 
@@ -284,17 +297,17 @@ export function ScrapedPostsClient({
     }
   }
 
-  function handleConnectGmail() {
+  async function handleConnectGmail() {
     posthog.capture("gmail_connect_clicked", { source: "apply_modal" })
-    signIn(
-      "google",
-      { callbackUrl: "/dashboard/job-matches" },
-      {
-        scope: "openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
-        access_type: "offline",
-        prompt: "consent",
+    try {
+      const res = await fetch("/api/gmail/connect")
+      const data = await res.json()
+      if (data.authUrl) {
+        window.location.href = data.authUrl
       }
-    )
+    } catch {
+      // silently ignore — user stays on page
+    }
   }
 
   function validateResumeFile(file: File): string | null {
@@ -888,8 +901,8 @@ export function ScrapedPostsClient({
       </div>
 
       {/* ── Single Apply: Cover Letter Modal ─────────────────────────────── */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      {modalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Review Cover Letter</h2>
@@ -911,12 +924,13 @@ export function ScrapedPostsClient({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Resume Upload Modal ───────────────────────────────────────────── */}
-      {resumeModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      {resumeModalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Upload Resume</h2>
@@ -941,12 +955,13 @@ export function ScrapedPostsClient({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Gmail Connect Modal ───────────────────────────────────────────── */}
-      {gmailModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      {gmailModalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Connect Gmail</h2>
@@ -963,12 +978,18 @@ export function ScrapedPostsClient({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* ── Auto Apply Floating Panel ─────────────────────────────────────── */}
-      {autoApplyOpen && (
-        <div className={`fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-3rem)] rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden transition-all duration-300 ${autoApplyMinimized ? "w-72" : ""}`}>
+      {/* ── Auto Apply Panel ──────────────────────────────────────────────── */}
+      {autoApplyOpen && createPortal(
+        <div className={`fixed z-[9999] transition-all duration-300 ${
+          autoApplyMinimized
+            ? "bottom-6 right-6 w-72"
+            : "inset-0 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        }`}>
+        <div className={`rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden ${autoApplyMinimized ? "w-full" : "w-full max-w-lg"}`}>
 
           {/* Header — always visible */}
           <div className="px-4 py-3 bg-gray-900 flex items-center justify-between gap-3">
@@ -1118,6 +1139,8 @@ export function ScrapedPostsClient({
             </>
           )}
         </div>
+        </div>,
+        document.body
       )}
     </div>
   )

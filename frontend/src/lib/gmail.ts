@@ -6,11 +6,11 @@ export class GmailService {
   private static oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.NEXTAUTH_URL}/api/auth/callback/google`
+    `${process.env.NEXTAUTH_URL}/api/gmail/callback`
   )
 
   static async getGmailCredentials(userId: string) {
-    const credential = await prisma.gmailCredential.findUnique({
+    const credential = await prisma.gmailCredentials.findUnique({
       where: { user_id: userId }
     })
 
@@ -26,10 +26,9 @@ export class GmailService {
 
     // Check if token is expired or will expire soon (within 5 minutes)
     const now = new Date()
-    const expiryTime = new Date(credential.token_expiry)
     const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000)
 
-    if (expiryTime <= fiveMinutesFromNow) {
+    if (!credential.token_expiry || new Date(credential.token_expiry) <= fiveMinutesFromNow) {
       // Token is expired or expiring soon, refresh it
       return this.refreshAccessToken(userId)
     }
@@ -40,6 +39,10 @@ export class GmailService {
 
   static async refreshAccessToken(userId: string): Promise<string> {
     const credential = await this.getGmailCredentials(userId)
+
+    if (!credential.refresh_token) {
+      throw new Error('No refresh token available — please reconnect Gmail')
+    }
 
     this.oauth2Client.setCredentials({
       refresh_token: TokenEncryption.decryptToken(credential.refresh_token)
@@ -53,7 +56,7 @@ export class GmailService {
       // Encrypt new token and update database
       const encryptedAccessToken = TokenEncryption.encryptToken(newAccessToken)
 
-      await prisma.gmailCredential.update({
+      await prisma.gmailCredentials.update({
         where: { user_id: userId },
         data: {
           access_token: encryptedAccessToken,
@@ -124,7 +127,7 @@ export class GmailService {
       await this.oauth2Client.revokeToken(accessToken)
 
       // Remove from database
-      await prisma.gmailCredential.delete({
+      await prisma.gmailCredentials.delete({
         where: { user_id: userId }
       })
 
@@ -143,7 +146,7 @@ export class GmailService {
 
   static async getConnectionStatus(userId: string) {
     try {
-      const credential = await prisma.gmailCredential.findUnique({
+      const credential = await prisma.gmailCredentials.findUnique({
         where: { user_id: userId },
         select: {
           email_address: true,
@@ -158,7 +161,9 @@ export class GmailService {
       }
 
       const now = new Date()
-      const isExpired = new Date(credential.token_expiry) <= now
+      const isExpired = credential.token_expiry
+        ? new Date(credential.token_expiry) <= now
+        : false
 
       return {
         connected: true,
@@ -220,27 +225,23 @@ export class GmailService {
     }
 
     // Check if exists to determine if we can create (need refresh token)
-    const existing = await prisma.gmailCredential.findUnique({
+    const existing = await prisma.gmailCredentials.findUnique({
       where: { user_id: userId }
     })
 
     if (!existing) {
-      if (!refreshToken) {
-        throw new Error('Refresh token required for initial connection')
-      }
-
-      await prisma.gmailCredential.create({
+      await prisma.gmailCredentials.create({
         data: {
           user_id: userId,
           email_address: emailAddress,
           access_token: encryptedAccessToken,
-          refresh_token: TokenEncryption.encryptToken(refreshToken),
+          refresh_token: refreshToken ? TokenEncryption.encryptToken(refreshToken) : null,
           token_expiry: expiryDate ? new Date(expiryDate) : new Date(Date.now() + 3600 * 1000),
           scopes: []
         }
       })
     } else {
-      await prisma.gmailCredential.update({
+      await prisma.gmailCredentials.update({
         where: { user_id: userId },
         data: updateData
       })
