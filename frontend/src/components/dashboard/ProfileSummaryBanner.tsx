@@ -17,13 +17,22 @@ export function ProfileSummaryBanner({ data }: ProfileSummaryBannerProps) {
 
   const handleStartSearch = async () => {
     setSearching(true)
+    let destination = "/dashboard/job-matches"
     try {
+      const limitRes = await fetch("/api/scraping/daily-limit")
+      if (limitRes.ok) {
+        const { data } = await limitRes.json()
+        if (data && data.current >= data.limit) {
+          destination = "/dashboard/billing"
+          return
+        }
+      }
       await fetch("/api/scraping/match-posts", { method: "POST" })
     } catch {
       // proceed to matches page even on error
     } finally {
       setSearching(false)
-      router.push("/dashboard/job-matches")
+      router.push(destination)
     }
   }
 

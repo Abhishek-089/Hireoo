@@ -7,9 +7,21 @@ import {
 } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "Features - Hireoo",
-  description: "Everything you need to automate your job search.",
+  title: "Features – One Click Apply Jobs & Job Automation Tools",
+  description: "Explore Hireoo's features: one-click apply to jobs, AI-powered job matching, bulk auto-apply to 10 jobs at once, and full email tracking. The most complete job application automation platform in India.",
   alternates: { canonical: "/features" },
+  openGraph: {
+    title: "Features – One Click Apply Jobs & Job Automation Tools | Hireoo",
+    description: "One-click apply to jobs, AI matching, bulk auto-apply, and reply tracking. Automate your entire job search with Hireoo.",
+    url: "https://www.hireoo.in/features",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Hireoo Features" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Features – One Click Apply Jobs & Job Automation | Hireoo",
+    description: "One-click apply to jobs, AI matching, bulk auto-apply, and reply tracking.",
+    images: ["/og-image.png"],
+  },
 }
 
 export default function FeaturesPage() {

@@ -4,9 +4,21 @@ import Image from "next/image"
 import { ArrowRight, Zap, Target, Heart, Users, TrendingUp, Mail } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "About - Hireoo",
-  description: "Learn about Hireoo — the AI-powered platform that automates your job search so you can focus on what matters.",
+  title: "About Hireoo – Building India's Best Auto Apply Job Website",
+  description: "Learn about Hireoo — the team building India's #1 auto apply job website. We automate job applications so job seekers can focus on interviews, not tedious applications.",
   alternates: { canonical: "/about" },
+  openGraph: {
+    title: "About Hireoo – Building India's Best Auto Apply Job Website",
+    description: "The team building India's #1 auto apply job website — automating job applications so you can focus on interviews.",
+    url: "https://www.hireoo.in/about",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "About Hireoo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "About Hireoo – Auto Apply Job Website",
+    description: "The team building India's #1 auto apply job website.",
+    images: ["/og-image.png"],
+  },
 }
 
 const values = [

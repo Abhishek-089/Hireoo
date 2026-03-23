@@ -6,9 +6,21 @@ import {
 } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "How It Works - Hireoo",
-  description: "From sign-up to job offer in 4 simple steps.",
+  title: "How to Apply Job in One Click – Automate Job Applications | Hireoo",
+  description: "Learn how Hireoo lets you apply to jobs in one click. Create your profile, AI matches fresh jobs daily, you one-click apply via Gmail, and track every reply. Go from signup to first application in under 10 minutes.",
   alternates: { canonical: "/how-it-works" },
+  openGraph: {
+    title: "How to Apply Job in One Click – Automate Job Applications | Hireoo",
+    description: "Create profile → AI matches jobs → one-click apply via Gmail → track replies. Automate your job applications in under 10 minutes.",
+    url: "https://www.hireoo.in/how-it-works",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "How Hireoo Works" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "How to Apply Job in One Click | Hireoo",
+    description: "Create profile → AI matches jobs → one-click apply via Gmail → track replies.",
+    images: ["/og-image.png"],
+  },
 }
 
 const steps = [

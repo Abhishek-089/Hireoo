@@ -5,10 +5,22 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
 export const metadata: Metadata = {
-  title: "Pricing - Hireoo",
-  description: "Choose the perfect plan for your job search automation needs. Start free and scale as you grow.",
+  title: "Pricing – Auto Apply Job Website Plans Starting Free | Hireoo",
+  description: "Start automating job applications for free. Hireoo's auto apply job website plans start at ₹0 — get one-click apply, AI job matching, and bulk auto-apply. Upgrade from ₹149/month.",
   alternates: {
     canonical: "/pricing",
+  },
+  openGraph: {
+    title: "Pricing – Auto Apply Jobs Starting Free | Hireoo",
+    description: "Free to start. One-click apply, AI job matching, bulk auto-apply. Upgrade from ₹149/month.",
+    url: "https://www.hireoo.in/pricing",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Hireoo Pricing" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pricing – Auto Apply Jobs Starting Free | Hireoo",
+    description: "Free to start. One-click apply, AI job matching. Upgrade from ₹149/month.",
+    images: ["/og-image.png"],
   },
 }
 
