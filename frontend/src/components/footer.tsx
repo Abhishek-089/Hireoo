@@ -6,6 +6,11 @@ const links = {
     { name: "Features", href: "/features" },
     { name: "How It Works", href: "/how-it-works" },
     { name: "Pricing", href: "/pricing" },
+    { name: "Auto Apply Jobs", href: "/auto-apply-jobs" },
+  ],
+  Resources: [
+    { name: "Blog", href: "/blog" },
+    { name: "FAQ", href: "/faq" },
   ],
   Company: [
     { name: "About", href: "/about" },
@@ -21,7 +26,7 @@ export function Footer() {
   return (
     <footer className="bg-gray-50 border-t border-gray-100">
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pt-12 pb-8">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-8">
           {/* Brand */}
           <div className="col-span-2">
             <Link href="/" className="flex items-center mb-3">
